@@ -1,8 +1,8 @@
-from PySide6.QtWidgets import QGridLayout, QGroupBox, QVBoxLayout, QLabel
+from PySide6.QtWidgets import QGridLayout, QGroupBox, QLabel, QWidget
 
 
 class StatisticsView(QGroupBox):
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None=None):
         super().__init__("Statistics", parent)
         layout = QGridLayout(self)
         layout.addWidget(QLabel("#Nodes"), 0, 0)

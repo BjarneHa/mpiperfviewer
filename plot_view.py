@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QGroupBox, QTabBar, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGroupBox, QTabWidget, QVBoxLayout, QWidget
+from matplotlib.axes import Axes
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
@@ -7,7 +8,9 @@ from matplotlib.figure import Figure
 TABS = ["matrix", "total size", "msg count", "tags"]
 
 class PlotViewer(QGroupBox):
-    def __init__(self, parent=None):
+    _static_ax: Axes
+
+    def __init__(self, parent: QWidget | None=None):
         super().__init__("Plot Viewer", parent)
         layout = QVBoxLayout(self)
         self.setLayout(layout)
@@ -25,5 +28,5 @@ class PlotViewer(QGroupBox):
 
             self._static_ax = static_canvas.figure.subplots()
             t = np.linspace(0, 10, 501)
-            self._static_ax.plot(t, np.tan(t + i), ".")
-            tabwidget.addTab(tabWidget, tab)
+            _ = self._static_ax.plot(t, np.tan(t + i), ".")
+            _ = tabwidget.addTab(tabWidget, tab)

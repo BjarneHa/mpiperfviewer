@@ -1,14 +1,12 @@
-import sys
-import time
+from typing import final
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
-import numpy as np
 
 from filter_view import FilterView
 from plot_view import PlotViewer
 from statistics_view import StatisticsView
 
-
+@final
 class ApplicationWindow(QWidget):
     def __init__(self):
         super().__init__()
