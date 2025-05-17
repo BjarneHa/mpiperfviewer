@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import sys
+
 from PySide6.QtWidgets import QApplication
 
 from application_window import ApplicationWindow
-
 
 if __name__ == "__main__":
     # Check whether there is already a running QApplication (e.g., if running

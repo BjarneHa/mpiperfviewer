@@ -1,11 +1,12 @@
 from typing import final
 
-from PySide6.QtWidgets import QFileDialog, QWidget, QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QVBoxLayout, QWidget
 
 from filter_view import FilterView
 from parser import Rank
 from plot_view import PlotViewer
 from statistics_view import StatisticsView
+
 
 @final
 class ApplicationWindow(QWidget):
