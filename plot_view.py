@@ -17,7 +17,6 @@ class PlotViewer(QGroupBox):
     def __init__(self, parent: QWidget | None=None):
         super().__init__("Plot Viewer", parent)
         layout = QVBoxLayout(self)
-        self.setLayout(layout)
         mplstyle.use("fast")
 
         tabwidget = QTabWidget(self)

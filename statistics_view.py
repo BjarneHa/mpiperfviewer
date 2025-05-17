@@ -9,4 +9,3 @@ class StatisticsView(QGroupBox):
         layout.addWidget(QLabel("#MPI Processes"), 1, 0)
         layout.addWidget(QLabel("Total msg count"), 2, 0)
         layout.addWidget(QLabel("Total msg size"), 3, 0)
-        self.setLayout(layout)

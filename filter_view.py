@@ -38,4 +38,3 @@ class FilterView(QGroupBox):
         layout = QGridLayout(self)
         for (i, filter) in enumerate(FILTERS):
             self._range_filters[filter] = RangeFilter(filter, i, layout, self)
-        self.setLayout(layout)
