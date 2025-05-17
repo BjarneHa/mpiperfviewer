@@ -29,11 +29,34 @@ class RankPeer:
     components: list[str] = field(deserializer=lambda x: x.split(","))
 
 @deserialize
-class Rank:
+class RankFile:
     general: RankGeneric
     peers: dict[int, RankPeer] = field(rename="peer", deserializer=lambda x: {int(k) : from_dict(RankPeer, v) for k,v in x.items()})
 
+    def tags(self, component="pml"):
+        return {
+            peer: data.sent_tags[component]
+            for peer, data in self.peers.items() if component in data.components
+        }
 
-def parse(file: str):
+    def exact_sizes(self, component="pml"):
+        return {
+            peer: data.sent_sizes["exact"][component]
+            for peer, data in self.peers.items() if component in data.components
+        }
+
+    def count(self, component="pml"):
+        return {
+            peer: data.sent_count[component]
+            for peer, data in self.peers.items() if component in data.components
+        }
+
+class Rank:
+    def __init__(self, rf: RankFile):
+        self.general = rf.general
+        self.peers = rf.peers
+
+
+def parse_rankfile(file: str):
     with open(file, "r") as f:
-        return from_toml(Rank, f.read())
+        return from_toml(RankFile, f.read())
