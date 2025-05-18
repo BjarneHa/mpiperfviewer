@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from serde import deserialize, field, from_dict
 from serde.toml import from_toml
 
+from filter_view import UNFILTERED, Filter
+
 
 @dataclass
 class RankGeneric:
@@ -69,23 +71,31 @@ class Rank:
     def general(self):
         return self._rf.general
 
-    def tags(self, component: str = "pml"):
+    def tags(self, component: str = "pml", filter: Filter = UNFILTERED):
         return {
-            peer: data.sent_tags[component]
+            peer: {
+                tag: occ
+                for tag, occ in data.sent_tags[component].items()
+                if filter.test(tag)
+            }
             for peer, data in self._rf.peers.items()
             if component in data.components
         }
 
-    def exact_sizes(self, component: str = "pml"):
+    def exact_sizes(self, component: str = "pml", filter: Filter = UNFILTERED):
         return {
-            peer: data.sent_sizes["exact"][component]
+            peer: {
+                size: occ
+                for size, occ in data.sent_sizes["exact"][component].items()
+                if filter.test(size)
+            }
             for peer, data in self._rf.peers.items()
             if component in data.components
         }
 
-    def count(self, component: str = "pml"):
+    def count(self, component: str = "pml", filter: Filter = UNFILTERED):
         return {
             peer: data.sent_count[component]
             for peer, data in self._rf.peers.items()
-            if component in data.components
+            if component in data.components and filter.test(data.sent_count[component])
         }

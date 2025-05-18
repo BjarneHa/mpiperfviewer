@@ -63,6 +63,7 @@ def tags_plot_3d(
 def sizes_plot_3d(
     title: str, fig: Figure, procs: list[int], sizes: dict[int, dict[int, int]]
 ):
+    fig.clear()
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
 
     # TODO move into parser.py?
@@ -111,6 +112,7 @@ def sizes_plot_3d(
 
 
 def counts_plot_2d(title: str, fig: Figure, procs: list[int], counts: dict[int, int]):
+    fig.clear()
     ax = fig.add_subplot()
 
     _ = ax.bar(list(counts.keys()), list(counts.values()), color="teal", width=0.8)

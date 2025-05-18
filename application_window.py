@@ -27,3 +27,4 @@ class ApplicationWindow(QWidget):
         self.plot_viewer = PlotViewer(rank_file, self)
         self._right_col.addWidget(self.plot_viewer)
         row_layout.addLayout(self._right_col, 1)
+        self.filter_view.filters_changed.connect(self.plot_viewer.filters_changed)
