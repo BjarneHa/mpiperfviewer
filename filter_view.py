@@ -27,7 +27,7 @@ class RangeFilterWidget(QObject):
         super().__init__(parent)
         self._checkbox = QCheckBox(filter, parent)
         _ = self._checkbox.checkStateChanged.connect(self._check_changed)
-        layout.addWidget(self._checkbox, i * 2, 0, 1, 3)
+        layout.addWidget(self._checkbox, i * 2, 0, 1, 5)
         self._min_edit = QLineEdit(parent, placeholderText="-∞")
         self._min_edit.setDisabled(True)
         self._min_edit.setValidator(QRegularExpressionValidator(r"-?\d+", self))
@@ -35,9 +35,13 @@ class RangeFilterWidget(QObject):
         self._max_edit.setDisabled(True)
         self._max_edit.setValidator(QRegularExpressionValidator(r"-?\d+", self))
         layout.addWidget(self._min_edit, i * 2 + 1, 0)
-        filter_label = QLabel(f"≤ {filter} ≤")
-        layout.addWidget(filter_label, i * 2 + 1, 1)
-        layout.addWidget(self._max_edit, i * 2 + 1, 2)
+        layout.addWidget(QLabel("≤"), i * 2 + 1, 1)
+        layout.addWidget(QLabel("≤"), i * 2 + 1, 3)
+        filter_label = QLabel(f"{filter}")
+        layout.addWidget(
+            filter_label, i * 2 + 1, 2, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        layout.addWidget(self._max_edit, i * 2 + 1, 4)
 
     @Slot()
     def _check_changed(self, value: Qt.CheckState):
@@ -107,7 +111,7 @@ class FilterView(QGroupBox):
         for i, filter in enumerate(FILTERS):
             self._range_filters[filter] = RangeFilterWidget(filter, i, layout, self)
         self._apply_button = QPushButton("Apply")
-        layout.addWidget(self._apply_button, len(FILTERS) * 2, 0, 1, 3)
+        layout.addWidget(self._apply_button, len(FILTERS) * 2, 0, 1, 5)
         self._apply_button.clicked.connect(self._apply_filters)
         self._filter_state = {filter: UNFILTERED for filter in FILTERS}
 
