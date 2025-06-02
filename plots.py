@@ -3,6 +3,84 @@ from typing import cast
 import numpy as np
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
+from numpy.typing import NDArray
+
+from parser import WorldData
+
+
+# TODO code duplication
+def plot_size_matrix(title: str, fig: Figure, ranks: list[int], world_data: WorldData):
+    n = len(ranks)
+    matrix = np.zeros((n, n), dtype=np.uint64)
+    i = 0
+    for sender in world_data.ranks:
+        s = sender.general().own_rank
+        if s not in ranks:
+            continue
+        j = 0
+        for r, sent in sender.bytes_sent().items():
+            if r not in ranks:
+                continue
+            matrix[i][j] = sent
+            j += 1
+        i += 1
+
+    plot_matrix(title, "bytes sent", fig, matrix, ranks, "viridis")
+
+
+# TODO code duplication
+def plot_msgs_matrix(title: str, fig: Figure, ranks: list[int], world_data: WorldData):
+    n = len(ranks)
+    matrix = np.zeros((n, n), dtype=np.uint64)
+    i = 0
+    for sender in world_data.ranks:
+        s = sender.general().own_rank
+        if s not in ranks:
+            continue
+        j = 0
+        for r, sent in sender.msgs_sent().items():
+            if r not in ranks:
+                continue
+            matrix[i][j] = sent
+            j += 1
+        i += 1
+
+    plot_matrix(title, "messages sent", fig, matrix, ranks, "Blues")
+
+
+def plot_matrix(
+    title: str,
+    legend_title: str,
+    fig: Figure,
+    matrix: NDArray[np.uint64],
+    ranks: list[int],
+    cmap: str = "viridis",
+    seperators: list[int] | None = None,
+):
+    fig.clear()
+    ax = fig.add_subplot()
+    ticks = np.arange(0, len(matrix))
+
+    img = ax.imshow(matrix, cmap, norm="log")
+    # TODO labels do not work correctly
+    ax.set_xticks(ticks, labels=[str(r) for r in ranks], minor=True)
+    ax.set_yticks(ticks, labels=[str(r) for r in ranks], minor=True)
+
+    cbar = fig.colorbar(img)
+    cbar.ax.set_ylabel(legend_title, rotation=-90, va="bottom")
+    seperators = seperators or []
+    for sep in seperators:
+        ax.axvline(x=sep + 0.5, color="black")
+        ax.axhline(y=sep + 0.5, color="black")
+
+    ax.set_xlabel("Receiver")
+    ax.set_ylabel("Sender")
+    ax.set_title(title)
+
+
+################
+# DORMANT CODE #
+################
 
 
 def tags_plot_3d(

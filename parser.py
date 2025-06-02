@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from datetime import timedelta
+from pathlib import Path
 
 from serde import deserialize, field, from_dict
 from serde.toml import from_toml
@@ -56,16 +58,15 @@ class Rank:
     total_bytes_sent: int = 0
     total_msgs_sent: int = 0
 
-    def __init__(self, file: str):
-        with open(file, "r") as f:
-            self._rf = from_toml(RankFile, f.read())
+    def __init__(self, rankfile: RankFile):
+        self._rf = rankfile
         self.calculate_totals()
 
     def calculate_totals(self):
         for sent in self.exact_sizes().values():
             for size, occ in sent.items():
                 self.total_bytes_sent += size * occ
-        for count in self.count().values():
+        for count in self.msgs_sent().values():
             self.total_msgs_sent += count
 
     def general(self):
@@ -93,9 +94,75 @@ class Rank:
             if component in data.components
         }
 
-    def count(self, component: str = "pml", filter: Filter = UNFILTERED):
+    # TODO filtering?
+    def bytes_sent(self, component: str = "pml"):
+        return {
+            peer: sum(
+                [
+                    size * occ
+                    for size, occ in data.sent_sizes["exact"][component].items()
+                ]
+            )
+            for peer, data in self._rf.peers.items()
+            if component in data.components
+        }
+
+    def msgs_sent(self, component: str = "pml", filter: Filter = UNFILTERED):
         return {
             peer: data.sent_count[component]
             for peer, data in self._rf.peers.items()
             if component in data.components and filter.test(data.sent_count[component])
         }
+
+
+@dataclass
+class WorldMeta:
+    num_nodes: int
+    num_processes: int
+    mpi_version: str
+    version: tuple[int, int, int]
+
+
+def rankfile_name(i: int):
+    return f"pc_data_{i}.toml"
+
+
+class WorldData:
+    meta: WorldMeta
+    ranks: list[Rank]
+    total_bytes_sent: int
+    total_msgs_sent: int
+    wall_time: timedelta
+
+    def __init__(self, world_path: Path):
+        self.get_metadata(world_path)
+        self.get_ranks(world_path)
+        self.get_derived_statistics()
+
+    # TODO this will hopefully be done differently in the future
+    def get_metadata(self, world_path: Path):
+        with open(world_path / rankfile_name(0), "r") as f:
+            rf0 = from_toml(RankFile, f.read())
+            self.meta = WorldMeta(
+                num_processes=rf0.general.num_procs,
+                mpi_version=rf0.general.mpi_version,
+                version=(0, 0, 0),
+                num_nodes=0,
+            )
+
+    def get_ranks(self, world_path: Path):
+        self.ranks = list()
+        hostnames = set[str]()
+        for i in range(self.meta.num_processes):
+            with open(world_path / rankfile_name(i), "r") as f:
+                rank = Rank(from_toml(RankFile, f.read()))
+                hostnames.add(rank.general().hostname)
+                self.ranks.append(rank)
+        self.meta.num_nodes = len(hostnames)
+
+    def get_derived_statistics(self):
+        self.total_bytes_sent = sum([rank.total_bytes_sent for rank in self.ranks])
+        self.total_msgs_sent = sum([rank.total_msgs_sent for rank in self.ranks])
+        self.wall_time = timedelta(
+            microseconds=max([rank.general().wall_time for rank in self.ranks])
+        )

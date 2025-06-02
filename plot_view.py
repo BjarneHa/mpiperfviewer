@@ -4,19 +4,19 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGroupBox, QTabWidget, QVBoxLayout, QWidget
 
 from filter_view import UNFILTERED, Filter
-from parser import Rank
-from plots import counts_plot_2d, sizes_plot_3d, tags_plot_3d
+from parser import WorldData
+from plots import plot_msgs_matrix, plot_size_matrix
 
-TABS = ["matrix", "total size", "msg count", "tags"]
+TABS = ["total size", "msg count", "tags"]
 
 
 class PlotViewer(QGroupBox):
-    _rank_data: Rank
+    _world_data: WorldData
     _canvases: dict[str, FigureCanvasQTAgg] = dict()
 
-    def __init__(self, rank_data: Rank, parent: QWidget | None = None):
+    def __init__(self, world_data: WorldData, parent: QWidget | None = None):
         super().__init__("Plot Viewer", parent)
-        self._rank_data = rank_data
+        self._world_data = world_data
         layout = QVBoxLayout(self)
         mplstyle.use("fast")
 
@@ -37,31 +37,26 @@ class PlotViewer(QGroupBox):
     # If filters is not None, only plots related to the filters will be redrawn
     def _update_plots(self, filters: dict[str, Filter] | None = None):
         _filters = filters or dict()
-        ranks = list(range(self._rank_data.general().num_procs))
-        if "size" in _filters.keys() or filters is None:
-            sizes_plot_3d(
-                f"Messages with size to peer from Rank {self._rank_data.general().own_rank}",
-                self._canvases["total size"].figure,
-                ranks,
-                self._rank_data.exact_sizes(filter=_filters.get("size", UNFILTERED)),
-            )
-            self._canvases["total size"].draw()
-        if "count" in _filters.keys() or filters is None:
-            counts_plot_2d(
-                f"Messages sent to peers by Rank {self._rank_data.general().own_rank}",
-                self._canvases["msg count"].figure,
-                ranks,
-                self._rank_data.count(filter=_filters.get("count", UNFILTERED)),
-            )
-            self._canvases["msg count"].draw()
-        if "tags" in _filters.keys() or filters is None:
-            tags_plot_3d(
-                f"Messages with tag to peer from Rank {self._rank_data.general().own_rank}",
-                self._canvases["tags"].figure,
-                ranks,
-                self._rank_data.tags(filter=_filters.get("tags", UNFILTERED)),
-            )
-            self._canvases["tags"].draw()
+        ranks = [
+            rank.general().own_rank
+            for rank in self._world_data.ranks
+            if _filters.get("count", UNFILTERED).test(rank.total_msgs_sent)
+        ]
+        for rank in self._world_data.ranks:
+            print(rank.total_msgs_sent)
+        plot_msgs_matrix(
+            "Communication Matrix (message count)",
+            self._canvases["msg count"].figure,
+            ranks,
+            self._world_data,
+        )
+        plot_size_matrix(
+            "Communication Matrix (total size)",
+            self._canvases["total size"].figure,
+            ranks,
+            self._world_data,
+        )
+        self._canvases["total size"].draw()
 
     @Slot(object)
     def filters_changed(self, filters: dict[str, Filter]):

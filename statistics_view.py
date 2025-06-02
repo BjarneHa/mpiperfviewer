@@ -3,7 +3,7 @@ from math import inf, isnan
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGridLayout, QGroupBox, QLabel, QWidget
 
-from parser import Rank
+from parser import WorldData
 
 SI_PREFIXES = "kMGTPEZYRQ"
 
@@ -22,26 +22,26 @@ def si_str(n: float):
 
 
 class StatisticsView(QGroupBox):
-    def __init__(self, rank_file: Rank, parent: QWidget | None = None):
+    _num_items: int = 0
+    _layout: QGridLayout
+
+    def __init__(self, world_data: WorldData, parent: QWidget | None = None):
         super().__init__("Statistics", parent)
-        layout = QGridLayout(self)
-        layout.addWidget(QLabel("#Nodes"), 0, 0)
-        nodes_label = QLabel("?", alignment=Qt.AlignmentFlag.AlignRight)
-        layout.addWidget(nodes_label, 0, 1)
-        layout.addWidget(QLabel("#MPI Processes"), 1, 0)
-        procs_label = QLabel(
-            text=f"{rank_file.general().num_procs:,}",
-            alignment=Qt.AlignmentFlag.AlignRight,
+        self._layout = QGridLayout(self)
+        self.add_stat("#Nodes", f"{world_data.meta.num_nodes:,}")
+        self.add_stat("#MPI Processes", f"{world_data.meta.num_processes:,}")
+        self.add_stat("Total msg count", f"{world_data.total_msgs_sent:,}")
+        self.add_stat(
+            "Total msg size",
+            si_str(world_data.total_bytes_sent) + "B",
         )
-        layout.addWidget(procs_label, 1, 1)
-        layout.addWidget(QLabel("Total msg count"), 2, 0)
-        total_msg_counts_label = QLabel(
-            text=f"{rank_file.total_msgs_sent:,}", alignment=Qt.AlignmentFlag.AlignRight
-        )
-        layout.addWidget(total_msg_counts_label, 2, 1)
-        layout.addWidget(QLabel("Total msg size"), 3, 0)
+        self.add_stat("Wall time", str(world_data.wall_time))
+
+    def add_stat(self, stat: str, value: str):
+        self._layout.addWidget(QLabel(stat), self._num_items, 0)
         total_msg_sizes_label = QLabel(
-            text=si_str(rank_file.total_bytes_sent) + "B",
+            text=value,
             alignment=Qt.AlignmentFlag.AlignRight,
         )
-        layout.addWidget(total_msg_sizes_label, 3, 1)
+        self._layout.addWidget(total_msg_sizes_label, self._num_items, 1)
+        self._num_items += 1
