@@ -42,8 +42,6 @@ class PlotViewer(QGroupBox):
             for rank in self._world_data.ranks
             if _filters.get("count", UNFILTERED).test(rank.total_msgs_sent)
         ]
-        for rank in self._world_data.ranks:
-            print(rank.total_msgs_sent)
         plot_msgs_matrix(
             "Communication Matrix (message count)",
             self._canvases["msg count"].figure,
