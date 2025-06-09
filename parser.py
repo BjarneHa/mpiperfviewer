@@ -164,5 +164,5 @@ class WorldData:
         self.total_bytes_sent = sum([rank.total_bytes_sent for rank in self.ranks])
         self.total_msgs_sent = sum([rank.total_msgs_sent for rank in self.ranks])
         self.wall_time = timedelta(
-            microseconds=max([rank.general().wall_time for rank in self.ranks])
+            microseconds=max([rank.general().wall_time / 1000 for rank in self.ranks])
         )

@@ -5,11 +5,22 @@ from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
+from filter_view import UNFILTERED, Filter
 from parser import WorldData
 
 
+# TODO refactor using numpy filter
+def _get_filtered_ranks(world_data: WorldData, filters: dict[str, Filter]):
+    return [
+        rank.general().own_rank
+        for rank in world_data.ranks
+        if filters.get("count", UNFILTERED).test(rank.total_msgs_sent)
+    ]
+
+
 # TODO code duplication
-def plot_size_matrix(title: str, fig: Figure, ranks: list[int], world_data: WorldData):
+def plot_size_matrix(fig: Figure, world_data: WorldData, filters: dict[str, Filter]):
+    ranks = _get_filtered_ranks(world_data, filters)
     n = len(ranks)
     matrix = np.zeros((n, n), dtype=np.uint64)
     i = 0
@@ -25,11 +36,19 @@ def plot_size_matrix(title: str, fig: Figure, ranks: list[int], world_data: Worl
             j += 1
         i += 1
 
-    plot_matrix(title, "bytes sent", fig, matrix, ranks, "viridis")
+    plot_matrix(
+        "Communication Matrix (message size)",
+        "bytes sent",
+        fig,
+        matrix,
+        ranks,
+        "viridis",
+    )
 
 
 # TODO code duplication
-def plot_msgs_matrix(title: str, fig: Figure, ranks: list[int], world_data: WorldData):
+def plot_msgs_matrix(fig: Figure, world_data: WorldData, filters: dict[str, Filter]):
+    ranks = _get_filtered_ranks(world_data, filters)
     n = len(ranks)
     matrix = np.zeros((n, n), dtype=np.uint64)
     i = 0
@@ -45,7 +64,14 @@ def plot_msgs_matrix(title: str, fig: Figure, ranks: list[int], world_data: Worl
             j += 1
         i += 1
 
-    plot_matrix(title, "messages sent", fig, matrix, ranks, "Blues")
+    plot_matrix(
+        "Communication Matrix (message count)",
+        "messages sent",
+        fig,
+        matrix,
+        ranks,
+        "Blues",
+    )
 
 
 def plot_matrix(
@@ -78,13 +104,12 @@ def plot_matrix(
     ax.set_title(title)
 
 
-################
-# DORMANT CODE #
-################
-
-
-def tags_plot_3d(
-    title: str, fig: Figure, procs: list[int], tags: dict[int, dict[int, int]]
+def plot_tags_3d(
+    title: str,
+    fig: Figure,
+    rank: int,
+    world_data: WorldData,
+    filters: dict[str, Filter],
 ):
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
 
@@ -95,6 +120,12 @@ def tags_plot_3d(
     #         sent_sizes_cumulative[size] = sent_sizes_cumulative.get(size, 0) + occ
     # procs = set([i for i in range(self._rank_data.general.num_procs)])
     # procs = set([rank for rank, v in exact_sizes.items() if sum(v.values()) > 0])
+
+    cur_rank = world_data.ranks[rank]
+    tags = world_data.ranks[rank].tags(filter=filters.get("tags", UNFILTERED))
+    procs = set(
+        [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
+    )
 
     # TODO move into parser.py?
     unique_tags: set[int] = set()
@@ -138,11 +169,20 @@ def tags_plot_3d(
     _ = ax.set_title(title)
 
 
-def sizes_plot_3d(
-    title: str, fig: Figure, procs: list[int], sizes: dict[int, dict[int, int]]
+def plot_sizes_3d(
+    title: str,
+    fig: Figure,
+    rank: int,
+    world_data: WorldData,
+    filters: dict[str, Filter],
 ):
     fig.clear()
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
+    cur_rank = world_data.ranks[rank]
+    sizes = cur_rank.exact_sizes(filter=filters.get("sizes", UNFILTERED))
+    procs = set(
+        [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
+    )  # TODO is this expected behavior?
 
     # TODO move into parser.py?
     unique_sizes: set[int] = set()
@@ -189,7 +229,14 @@ def sizes_plot_3d(
     _ = ax.set_title(title)
 
 
-def counts_plot_2d(title: str, fig: Figure, procs: list[int], counts: dict[int, int]):
+def plot_counts_2d(
+    title: str,
+    fig: Figure,
+    rank: int,
+    world_data: WorldData,
+    filters: dict[str, Filter],
+):
+    counts = world_data.ranks[rank].msgs_sent(filter=filters.get("counts", UNFILTERED))
     fig.clear()
     ax = fig.add_subplot()
 
