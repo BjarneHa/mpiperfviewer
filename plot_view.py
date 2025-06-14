@@ -160,6 +160,7 @@ class PlotViewer(QGroupBox):
     def _update_plots(self):
         for plot_tab in self._plots:
             plot_tab.update(plot_tab.canvas.figure, self._world_data, self._filters)
+            plot_tab.canvas.draw()
 
     @Slot(object)
     def filters_changed(self, filters: dict[str, Filter]):
@@ -223,7 +224,7 @@ class RankView(QGroupBox):
 class MatrixView(QGroupBox):
     _metric_box: QComboBox
     _group_by_box: QComboBox
-    create_tab = Signal(str, str)
+    create_tab: Signal = Signal(str, str)
 
     def __init__(self, parent: CreationTab):
         super().__init__("Global Communication Matrix", parent)
