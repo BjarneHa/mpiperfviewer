@@ -42,7 +42,7 @@ def plot_size_matrix(fig: Figure, world_data: WorldData, filters: GlobalFilters)
         fig,
         matrix,
         ranks,
-        "viridis",
+        "Reds",
     )
 
 
@@ -83,7 +83,6 @@ def plot_matrix(
     cmap: str = "viridis",
     seperators: list[int] | None = None,
 ):
-    fig.clear()
     ax = fig.add_subplot()
     ticks = np.arange(0, len(matrix))
 
@@ -105,21 +104,12 @@ def plot_matrix(
 
 
 def plot_tags_3d(
-    title: str,
     fig: Figure,
     rank: int,
     world_data: WorldData,
     filters: GlobalFilters,
 ):
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
-
-    # TODO this is not strictly the same as in the script... Should this be changed?
-    # sent_sizes_cumulative = dict[int, int]()
-    # for sizes in exact_sizes.values():
-    #     for size, occ in sizes.items():
-    #         sent_sizes_cumulative[size] = sent_sizes_cumulative.get(size, 0) + occ
-    # procs = set([i for i in range(self._rank_data.general.num_procs)])
-    # procs = set([rank for rank, v in exact_sizes.items() if sum(v.values()) > 0])
 
     cur_rank = world_data.ranks[rank]
     tags = world_data.ranks[rank].tags(filter=filters.tags)
@@ -166,17 +156,15 @@ def plot_tags_3d(
     _ = ax.set_xlabel("Rank")
     _ = ax.set_ylabel("Tag")
     _ = ax.set_zlabel("No. of messages")
-    _ = ax.set_title(title)
+    _ = ax.set_title(f"Messages with tag to peer from Rank {rank}")
 
 
 def plot_sizes_3d(
-    title: str,
     fig: Figure,
     rank: int,
     world_data: WorldData,
     filters: GlobalFilters,
 ):
-    fig.clear()
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
     cur_rank = world_data.ranks[rank]
     sizes = cur_rank.exact_sizes(filter=filters.size)
@@ -226,24 +214,122 @@ def plot_sizes_3d(
     _ = ax.set_xlabel("MPI_COMM_WORLD Rank of peer")
     _ = ax.set_ylabel("Size in Bytes")
     _ = ax.set_zlabel("Messages sent")
-    _ = ax.set_title(title)
+    _ = ax.set_title(f"Messages with size to peer from Rank {rank}")
 
 
 def plot_counts_2d(
-    title: str,
     fig: Figure,
     rank: int,
     world_data: WorldData,
     filters: GlobalFilters,
 ):
     counts = world_data.ranks[rank].msgs_sent(filter=filters.count)
-    fig.clear()
     ax = fig.add_subplot()
 
     _ = ax.bar(list(counts.keys()), list(counts.values()), color="teal", width=0.8)
     _ = ax.set_xlabel("MPI_COMM_WORLD Rank")
     _ = ax.set_ylabel("Messages sent")
-    _ = ax.set_title(title)
+    _ = ax.set_title(f"Messages sent to peers by Rank {rank}")
 
     # Idea is good, but looks weird for larger numbers
     # ax_counts.bar_label(p, label_type="center")
+
+
+def plot_tags_px(
+    fig: Figure,
+    rank: int,
+    world_data: WorldData,
+    filters: GlobalFilters,
+):
+    ax = fig.add_subplot()
+    cur_rank = world_data.ranks[rank]
+    tags = world_data.ranks[rank].tags(filter=filters.tags)
+    procs = set(
+        [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
+    )
+
+    # TODO move into parser.py?
+    unique_tags: set[int] = set()
+    for peer_tags in tags.values():
+        unique_tags.update(peer_tags.keys())
+
+    # Collect data from collected dict into lists for plot
+    xticks = np.arange(0, len(procs))
+    yticks = np.arange(0, len(unique_tags))
+
+    # Also works without casting to str, but produces type error
+    # Perhaps this should e dealt with differently
+    xlabels = [str(i) for i in sorted(procs)]
+    ylabels = [str(i) for i in sorted(unique_tags)]
+
+    proc_to_pos = dict(zip(sorted(procs), xticks))
+    tag_to_pos = dict(zip(sorted(unique_tags), yticks))
+
+    hmap = np.zeros((len(unique_tags), len(procs)), dtype=np.uint64)
+
+    for proc, pairs in tags.items():
+        for tag, count in pairs.items():
+            hmap[tag_to_pos[tag]][proc_to_pos[proc]] = count
+
+    img = ax.imshow(hmap, cmap="Greens", norm="log", aspect="auto")
+
+    _ = ax.set_xticks(xticks, labels=xlabels)
+    _ = ax.set_yticks(yticks, labels=ylabels)
+    _ = ax.set_xlabel("peer MPI_COMM_WORLD Rank")
+    _ = ax.set_ylabel("Tag")
+    _ = ax.set_title(f"Messages with tags to peer from Rank {rank}")
+
+    cbar = fig.colorbar(img)
+
+    _ = cbar.ax.set_ylabel("Message count", rotation=-90, va="bottom")
+
+
+def plot_sizes_px(
+    fig: Figure,
+    rank: int,
+    world_data: WorldData,
+    filters: GlobalFilters,
+):
+    ax = fig.add_subplot()
+    cur_rank = world_data.ranks[rank]
+    sizes = cur_rank.exact_sizes(filter=filters.size)
+    procs = set(
+        [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
+    )  # TODO is this expected behavior?
+
+    # TODO move into parser.py?
+    unique_sizes: set[int] = set()
+    for peer_tags in sizes.values():
+        unique_sizes.update(
+            peer_tags.keys()
+        )  # TODO filter out sizes that are never sent?
+
+    # Collect data from collected dict into lists for plot
+    xticks = np.arange(0, len(procs))
+    yticks = np.arange(0, len(unique_sizes))
+
+    # Also works without casting to str, but produces type error
+    # Perhaps this should e dealt with differently
+    xlabels = [str(i) for i in sorted(procs)]
+    ylabels = [str(i) for i in sorted(unique_sizes)]
+
+    proc_to_pos = dict(zip(sorted(procs), xticks))
+    size_to_pos = dict(zip(sorted(unique_sizes), yticks))
+
+    hmap = np.zeros((len(unique_sizes), len(procs)), dtype=np.uint64)
+
+    for proc, pairs in sizes.items():
+        for size, count in pairs.items():
+            hmap[size_to_pos[size]][proc_to_pos[proc]] = count
+
+    img = ax.imshow(hmap, cmap="Oranges", norm="log", aspect="auto")
+
+    _ = ax.set_xticks(xticks, labels=xlabels)
+    _ = ax.set_yticks(yticks, labels=ylabels)
+    _ = ax.set_xlabel("MPI_COMM_WORLD Rank of peer")
+    _ = ax.set_ylabel("Size in Bytes")
+    _ = ax.set_title(f"Messages with size to peer from Rank {rank}")
+
+    cbar = fig.colorbar(img)
+
+    _ = cbar.ax.set_ylabel("Message count", rotation=-90, va="bottom")

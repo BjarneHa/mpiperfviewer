@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Callable, final
 
-from matplotlib import style as mplstyle
 from matplotlib.backend_bases import FigureCanvasBase
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
@@ -28,7 +27,9 @@ from plots import (
     plot_msgs_matrix,
     plot_size_matrix,
     plot_sizes_3d,
+    plot_sizes_px,
     plot_tags_3d,
+    plot_tags_px,
 )
 
 UpdateFn = Callable[[Figure, WorldData, GlobalFilters], None]
@@ -46,10 +47,15 @@ class MatrixMetric(StrEnum):
     MESSAGES_SENT = "messages sent"
 
 
-class RankMetric(StrEnum):
+class RankPlotMetric(StrEnum):
     SENT_SIZES = "sent sizes"
     MESSAGE_COUNT = "message count"
     TAGS = "tags"
+
+
+class RankPlotType(StrEnum):
+    PIXEL_PLOT = "Pixel Plot"
+    BAR3D = "3D Bar"
 
 
 INITIAL_TABS = ["total size", "msg count"]
@@ -66,7 +72,7 @@ class PlotViewer(QGroupBox):
         self._world_data = world_data
         self._filters = INITIAL_GLOBAL_FILTERS
         layout = QVBoxLayout(self)
-        mplstyle.use("fast")
+        # mplstyle.use("fast")
 
         self._tab_widget = QTabWidget(self, tabsClosable=True)
         layout.addWidget(self._tab_widget)
@@ -101,40 +107,28 @@ class PlotViewer(QGroupBox):
         self._plots.pop(index)
 
     @Slot()
-    def add_rank_plot(self, rank: int, metric: RankMetric, type: str):
+    def add_rank_plot(self, rank: int, metric: RankPlotMetric, type: RankPlotType):
+        tab_title = f"rank {rank} – {metric} ({type})"
         match metric:
-            case RankMetric.TAGS:
-                self.add_tab(
-                    f"rank {rank} – tags",
-                    lambda fig, wd, filters: plot_tags_3d(
-                        f"Messages with size to peer from Rank {rank}",
-                        fig,
-                        rank,
-                        wd,
-                        filters,
-                    ),
-                    activate=True,
-                )
-            case RankMetric.SENT_SIZES:
-                self.add_tab(
-                    f"rank {rank} – sizes",
-                    lambda fig, wd, filters: plot_sizes_3d(
-                        f"Messages with size to peer from Rank {rank}",
-                        fig,
-                        rank,
-                        wd,
-                        filters,
-                    ),
-                    activate=True,
-                )
-            case RankMetric.MESSAGE_COUNT:
-                self.add_tab(
-                    f"rank {rank} – counts",
-                    lambda fig, wd, filters: plot_counts_2d(
-                        f"Messages sent to peers by Rank {rank}", fig, rank, wd, filters
-                    ),
-                    activate=True,
-                )
+            case RankPlotMetric.TAGS:
+                match type:
+                    case RankPlotType.PIXEL_PLOT:
+                        plotfn = plot_tags_px
+                    case RankPlotType.BAR3D:
+                        plotfn = plot_tags_3d
+            case RankPlotMetric.SENT_SIZES:
+                match type:
+                    case RankPlotType.PIXEL_PLOT:
+                        plotfn = plot_sizes_px
+                    case RankPlotType.BAR3D:
+                        plotfn = plot_sizes_3d
+            case RankPlotMetric.MESSAGE_COUNT:
+                plotfn = plot_counts_2d
+        self.add_tab(
+            tab_title,
+            lambda fig, wd, filters: plotfn(fig, rank, wd, filters),
+            activate=True,
+        )
 
     @Slot()
     def add_matrix_plot(self, metric: MatrixMetric, group_by: str):
@@ -159,6 +153,7 @@ class PlotViewer(QGroupBox):
     # If filters is not None, only plots related to the filters will be redrawn
     def _update_plots(self):
         for plot_tab in self._plots:
+            plot_tab.canvas.figure.clear()
             plot_tab.update(plot_tab.canvas.figure, self._world_data, self._filters)
             plot_tab.canvas.draw_idle()
 
@@ -199,17 +194,18 @@ class RankView(QGroupBox):
         layout.addWidget(self._rank_edit, 0, 1)
         layout.addWidget(QLabel("Metric"), 1, 0)
         self._metric_box = QComboBox(self)
-        for metric in RankMetric:
+        for metric in RankPlotMetric:
             self._metric_box.addItem(metric)
         layout.addWidget(self._metric_box, 1, 1)
         layout.addWidget(QLabel("Plot type"), 2, 0)
         self._type_box = QComboBox(self)
-        for metric in ["3D Bar", "Pixel Plot"]:
+        for metric in RankPlotType:
             self._type_box.addItem(metric)
         layout.addWidget(self._type_box, 2, 1)
         create_button = QPushButton("Create")
         layout.addWidget(create_button, 3, 0, 1, 2)
         create_button.clicked.connect(self.on_create)
+        self._metric_box.currentTextChanged.connect(self.on_select_metric)
 
     @Slot()
     def on_create(self):
@@ -219,6 +215,15 @@ class RankView(QGroupBox):
         metric = self._metric_box.currentText()
         type = self._type_box.currentText()
         self.create_tab.emit(rank, metric, type)
+
+    @Slot()
+    def on_select_metric(self, selected: str):
+        if selected == RankPlotMetric.MESSAGE_COUNT:
+            self._type_box.clear()
+            self._type_box.addItem("Bar Chart")
+        elif self._type_box.currentText() == "Bar Chart":
+            self._type_box.clear()
+            self._type_box.addItem(RankPlotType.PIXEL_PLOT)
 
 
 class MatrixView(QGroupBox):
