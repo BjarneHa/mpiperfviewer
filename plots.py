@@ -5,21 +5,21 @@ from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
-from filter_view import UNFILTERED, Filter
+from filter_view import GlobalFilters
 from parser import WorldData
 
 
 # TODO refactor using numpy filter
-def _get_filtered_ranks(world_data: WorldData, filters: dict[str, Filter]):
+def _get_filtered_ranks(world_data: WorldData, filters: GlobalFilters):
     return [
         rank.general().own_rank
         for rank in world_data.ranks
-        if filters.get("count", UNFILTERED).test(rank.total_msgs_sent)
+        if filters.count.test(rank.total_msgs_sent)
     ]
 
 
 # TODO code duplication
-def plot_size_matrix(fig: Figure, world_data: WorldData, filters: dict[str, Filter]):
+def plot_size_matrix(fig: Figure, world_data: WorldData, filters: GlobalFilters):
     ranks = _get_filtered_ranks(world_data, filters)
     n = len(ranks)
     matrix = np.zeros((n, n), dtype=np.uint64)
@@ -47,7 +47,7 @@ def plot_size_matrix(fig: Figure, world_data: WorldData, filters: dict[str, Filt
 
 
 # TODO code duplication
-def plot_msgs_matrix(fig: Figure, world_data: WorldData, filters: dict[str, Filter]):
+def plot_msgs_matrix(fig: Figure, world_data: WorldData, filters: GlobalFilters):
     ranks = _get_filtered_ranks(world_data, filters)
     n = len(ranks)
     matrix = np.zeros((n, n), dtype=np.uint64)
@@ -109,7 +109,7 @@ def plot_tags_3d(
     fig: Figure,
     rank: int,
     world_data: WorldData,
-    filters: dict[str, Filter],
+    filters: GlobalFilters,
 ):
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
 
@@ -122,7 +122,7 @@ def plot_tags_3d(
     # procs = set([rank for rank, v in exact_sizes.items() if sum(v.values()) > 0])
 
     cur_rank = world_data.ranks[rank]
-    tags = world_data.ranks[rank].tags(filter=filters.get("tags", UNFILTERED))
+    tags = world_data.ranks[rank].tags(filter=filters.tags)
     procs = set(
         [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
     )
@@ -174,12 +174,12 @@ def plot_sizes_3d(
     fig: Figure,
     rank: int,
     world_data: WorldData,
-    filters: dict[str, Filter],
+    filters: GlobalFilters,
 ):
     fig.clear()
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
     cur_rank = world_data.ranks[rank]
-    sizes = cur_rank.exact_sizes(filter=filters.get("sizes", UNFILTERED))
+    sizes = cur_rank.exact_sizes(filter=filters.size)
     procs = set(
         [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
     )  # TODO is this expected behavior?
@@ -234,9 +234,9 @@ def plot_counts_2d(
     fig: Figure,
     rank: int,
     world_data: WorldData,
-    filters: dict[str, Filter],
+    filters: GlobalFilters,
 ):
-    counts = world_data.ranks[rank].msgs_sent(filter=filters.get("counts", UNFILTERED))
+    counts = world_data.ranks[rank].msgs_sent(filter=filters.count)
     fig.clear()
     ax = fig.add_subplot()
 

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import override
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
@@ -12,8 +13,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QWidget,
 )
-
-FILTERS = ["size", "count", "tags"]
 
 
 class RangeFilterWidget(QObject):
@@ -99,33 +98,38 @@ class RangeFilter(Filter):
 UNFILTERED = RangeFilter()
 
 
+@dataclass
+class GlobalFilters:
+    size: RangeFilter
+    count: RangeFilter
+    tags: RangeFilter
+
+
+INITIAL_GLOBAL_FILTERS = GlobalFilters(UNFILTERED, UNFILTERED, UNFILTERED)
+
+
 class FilterView(QGroupBox):
     filters_changed: Signal = Signal(object)
-    _range_filters: dict[str, RangeFilterWidget] = dict()
+    _size_filter: RangeFilterWidget
+    _count_filter: RangeFilterWidget
+    _tags_filter: RangeFilterWidget
     _apply_button: QPushButton
-    _filter_state: dict[str, RangeFilter]
+    _filter_state: GlobalFilters
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__("Filter", parent)
         layout = QGridLayout(self)
-        for i, filter in enumerate(FILTERS):
-            self._range_filters[filter] = RangeFilterWidget(filter, i, layout, self)
+        self._size_filter = RangeFilterWidget("size", 0, layout, self)
+        self._count_filter = RangeFilterWidget("count", 1, layout, self)
+        self._tags_filter = RangeFilterWidget("tags", 2, layout, self)
         self._apply_button = QPushButton("Apply")
-        layout.addWidget(self._apply_button, len(FILTERS) * 2, 0, 1, 5)
+        layout.addWidget(self._apply_button, 6, 0, 1, 5)
         self._apply_button.clicked.connect(self._apply_filters)
-        self._filter_state = {filter: UNFILTERED for filter in FILTERS}
+        self._filter_state = INITIAL_GLOBAL_FILTERS
 
     @Slot()
     def _apply_filters(self):
-        new_filter_state = {
-            name: rf.state() for name, rf in self._range_filters.items()
-        }
-        # Do not update filters where the values have not changed
-        self.filters_changed.emit(
-            {
-                filter: state
-                for filter, state in new_filter_state.items()
-                if state != self._filter_state[filter]
-            }
-        )
-        self._filter_state = new_filter_state
+        self._filter_state.size = self._size_filter.state()
+        self._filter_state.count = self._count_filter.state()
+        self._filter_state.tags = self._tags_filter.state()
+        self.filters_changed.emit(self._filter_state)

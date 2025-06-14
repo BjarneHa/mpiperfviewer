@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from filter_view import Filter
+from filter_view import INITIAL_GLOBAL_FILTERS, GlobalFilters
 from parser import WorldData
 from plots import (
     plot_counts_2d,
@@ -31,7 +31,7 @@ from plots import (
     plot_tags_3d,
 )
 
-UpdateFn = Callable[[Figure, WorldData, dict[str, Filter]], None]
+UpdateFn = Callable[[Figure, WorldData, GlobalFilters], None]
 
 
 @dataclass
@@ -59,12 +59,12 @@ class PlotViewer(QGroupBox):
     _world_data: WorldData
     _plots: list[PlotTab] = list()
     _tab_widget: QTabWidget
-    _filters: dict[str, Filter]
+    _filters: GlobalFilters
 
     def __init__(self, world_data: WorldData, parent: QWidget | None = None):
         super().__init__("Plot Viewer", parent)
         self._world_data = world_data
-        self._filters = {}
+        self._filters = INITIAL_GLOBAL_FILTERS
         layout = QVBoxLayout(self)
         mplstyle.use("fast")
 
@@ -160,10 +160,10 @@ class PlotViewer(QGroupBox):
     def _update_plots(self):
         for plot_tab in self._plots:
             plot_tab.update(plot_tab.canvas.figure, self._world_data, self._filters)
-            plot_tab.canvas.draw()
+            plot_tab.canvas.draw_idle()
 
     @Slot(object)
-    def filters_changed(self, filters: dict[str, Filter]):
+    def filters_changed(self, filters: GlobalFilters):
         self._filters = filters
         self._update_plots()
 
