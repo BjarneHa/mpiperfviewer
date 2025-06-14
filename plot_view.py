@@ -239,11 +239,14 @@ class MatrixView(QGroupBox):
         for m in MatrixMetric:
             self._metric_box.addItem(m.value)
         layout.addWidget(self._metric_box, 0, 1)
-        layout.addWidget(QLabel("Group by:"), 1, 0)
+        group_by_label = QLabel("Group by:")
+        layout.addWidget(group_by_label, 1, 0)
+        group_by_label.hide()  # TODO remove
         self._group_by_box = QComboBox(self)
         for item in ["Rank", "Core", "Socket", "Node"]:
             self._group_by_box.addItem(item)
         layout.addWidget(self._group_by_box, 1, 1)
+        self._group_by_box.hide()  # TODO remove
         create_button = QPushButton("Create")
         layout.addWidget(create_button, 2, 0, 1, 2)
         create_button.clicked.connect(self.on_create)
