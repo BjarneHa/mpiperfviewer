@@ -20,7 +20,7 @@ def _get_filtered_ranks(world_data: WorldData, filters: GlobalFilters):
 
 # TODO code duplication
 def plot_size_matrix(fig: Figure, world_data: WorldData, filters: GlobalFilters):
-    ranks = _get_filtered_ranks(world_data, filters)
+    ranks = list(range(world_data.meta.num_processes))
     n = len(ranks)
     matrix = np.zeros((n, n), dtype=np.uint64)
     i = 0
@@ -48,7 +48,7 @@ def plot_size_matrix(fig: Figure, world_data: WorldData, filters: GlobalFilters)
 
 # TODO code duplication
 def plot_msgs_matrix(fig: Figure, world_data: WorldData, filters: GlobalFilters):
-    ranks = _get_filtered_ranks(world_data, filters)
+    ranks = list(range(world_data.meta.num_processes))
     n = len(ranks)
     matrix = np.zeros((n, n), dtype=np.uint64)
     i = 0
@@ -112,7 +112,7 @@ def plot_tags_3d(
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
 
     cur_rank = world_data.ranks[rank]
-    tags = world_data.ranks[rank].tags(filter=filters.tags)
+    tags = world_data.ranks[rank].tags(filters=filters)
     procs = set(
         [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
     )
@@ -167,7 +167,7 @@ def plot_sizes_3d(
 ):
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
     cur_rank = world_data.ranks[rank]
-    sizes = cur_rank.exact_sizes(filter=filters.size)
+    sizes = cur_rank.exact_sizes(filters=filters)
     procs = set(
         [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
     )  # TODO is this expected behavior?
@@ -243,7 +243,7 @@ def plot_tags_px(
 ):
     ax = fig.add_subplot()
     cur_rank = world_data.ranks[rank]
-    tags = world_data.ranks[rank].tags(filter=filters.tags)
+    tags = world_data.ranks[rank].tags(filters=filters)
     procs = set(
         [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
     )
@@ -292,7 +292,7 @@ def plot_sizes_px(
 ):
     ax = fig.add_subplot()
     cur_rank = world_data.ranks[rank]
-    sizes = cur_rank.exact_sizes(filter=filters.size)
+    sizes = cur_rank.exact_sizes(filters=filters)
     procs = set(
         [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
     )  # TODO is this expected behavior?

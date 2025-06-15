@@ -5,7 +5,7 @@ from pathlib import Path
 from serde import deserialize, field, from_dict
 from serde.toml import from_toml
 
-from filter_view import UNFILTERED, Filter
+from filter_view import INITIAL_GLOBAL_FILTERS, UNFILTERED, Filter, GlobalFilters
 
 
 @dataclass
@@ -72,27 +72,43 @@ class Rank:
     def general(self):
         return self._rf.general
 
-    def tags(self, component: str = "pml", filter: Filter = UNFILTERED):
-        return {
+    def tags(
+        self, component: str = "pml", filters: GlobalFilters = INITIAL_GLOBAL_FILTERS
+    ):
+        t = {
             peer: {
                 tag: occ
                 for tag, occ in data.sent_tags[component].items()
-                if filter.test(tag)
+                if filters.tags.test(tag)
             }
             for peer, data in self._rf.peers.items()
             if component in data.components
         }
+        t = {
+            peer: data
+            for peer, data in t.items()
+            if filters.count.test(sum(data.values()))
+        }
+        return t
 
-    def exact_sizes(self, component: str = "pml", filter: Filter = UNFILTERED):
-        return {
+    def exact_sizes(
+        self, component: str = "pml", filters: GlobalFilters = INITIAL_GLOBAL_FILTERS
+    ):
+        s = {
             peer: {
                 size: occ
                 for size, occ in data.sent_sizes["exact"][component].items()
-                if filter.test(size)
+                if filters.size.test(size)
             }
             for peer, data in self._rf.peers.items()
             if component in data.components
         }
+        s = {
+            peer: data
+            for peer, data in s.items()
+            if filters.count.test(sum(data.values()))
+        }
+        return s
 
     # TODO filtering?
     def bytes_sent(self, component: str = "pml"):
