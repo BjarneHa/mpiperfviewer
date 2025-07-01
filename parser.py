@@ -2,10 +2,9 @@ from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 from serde import deserialize, field, from_dict
 from serde.toml import from_toml
-
-from filter_view import INITIAL_GLOBAL_FILTERS, UNFILTERED, Filter, GlobalFilters
 
 
 @dataclass
@@ -53,82 +52,9 @@ class RankFile:
     )
 
 
-class Rank:
-    _rf: RankFile
-    total_bytes_sent: int = 0
-    total_msgs_sent: int = 0
-
-    def __init__(self, rankfile: RankFile):
-        self._rf = rankfile
-        self.calculate_totals()
-
-    def calculate_totals(self):
-        for sent in self.exact_sizes().values():
-            for size, occ in sent.items():
-                self.total_bytes_sent += size * occ
-        for count in self.msgs_sent().values():
-            self.total_msgs_sent += count
-
-    def general(self):
-        return self._rf.general
-
-    def tags(
-        self, component: str = "pml", filters: GlobalFilters = INITIAL_GLOBAL_FILTERS
-    ):
-        t = {
-            peer: {
-                tag: occ
-                for tag, occ in data.sent_tags[component].items()
-                if filters.tags.test(tag)
-            }
-            for peer, data in self._rf.peers.items()
-            if component in data.components
-        }
-        t = {
-            peer: data
-            for peer, data in t.items()
-            if filters.count.test(sum(data.values()))
-        }
-        return t
-
-    def exact_sizes(
-        self, component: str = "pml", filters: GlobalFilters = INITIAL_GLOBAL_FILTERS
-    ):
-        s = {
-            peer: {
-                size: occ
-                for size, occ in data.sent_sizes["exact"][component].items()
-                if filters.size.test(size)
-            }
-            for peer, data in self._rf.peers.items()
-            if component in data.components
-        }
-        s = {
-            peer: data
-            for peer, data in s.items()
-            if filters.count.test(sum(data.values()))
-        }
-        return s
-
-    # TODO filtering?
-    def bytes_sent(self, component: str = "pml"):
-        return {
-            peer: sum(
-                [
-                    size * occ
-                    for size, occ in data.sent_sizes["exact"][component].items()
-                ]
-            )
-            for peer, data in self._rf.peers.items()
-            if component in data.components
-        }
-
-    def msgs_sent(self, component: str = "pml", filter: Filter = UNFILTERED):
-        return {
-            peer: data.sent_count[component]
-            for peer, data in self._rf.peers.items()
-            if component in data.components and filter.test(data.sent_count[component])
-        }
+type UInt64Array[T: tuple[int, ...]] = np.ndarray[T, np.dtype[np.uint64]]
+type Int64Array[T: tuple[int, ...]] = np.ndarray[T, np.dtype[np.int64]]
+type Component = str
 
 
 @dataclass
@@ -137,26 +63,55 @@ class WorldMeta:
     num_processes: int
     mpi_version: str
     version: tuple[int, int, int]
+    components: frozenset[Component] = frozenset()
 
 
 def rankfile_name(i: int):
     return f"pc_data_{i}.toml"
 
 
-class WorldData:
-    meta: WorldMeta
-    ranks: list[Rank]
+class ComponentData:
+    # rank_sizes[sender, receiver, size_index] = occurances
+    rank_sizes: UInt64Array[tuple[int, int, int]]
+    # rank_tags[sender, receiver, tag_index] = occurances
+    rank_tags: UInt64Array[tuple[int, int, int]]
+    # rank_count[sender, receiver] = occurances
+    rank_count: UInt64Array[tuple[int, int]]
+    # occuring_sizes[size_index] = size
+    occuring_sizes: UInt64Array[tuple[int]]
+    # occuring_sizes[tag_index] = tag
+    occuring_tags: Int64Array[tuple[int]]
     total_bytes_sent: int
     total_msgs_sent: int
+
+    def __init__(
+        self,
+        occuring_sizes: UInt64Array[tuple[int]],
+        occuring_tags: Int64Array[tuple[int]],
+        num_processes: int,
+    ):
+        n = num_processes
+        self.occuring_sizes = occuring_sizes
+        self.occuring_tags = occuring_tags
+        self.rank_sizes = np.zeros((n, n, occuring_sizes.size), dtype=np.uint64).view()
+        self.rank_tags = np.zeros((n, n, occuring_tags.size), dtype=np.uint64).view()
+        self.rank_count = np.zeros((n, n), dtype=np.uint64).view()
+        self.total_bytes_sent = 0
+        self.total_msgs_sent = 0
+
+
+class WorldData:
+    meta: WorldMeta
+    components: dict[Component, ComponentData]
     wall_time: timedelta
 
     def __init__(self, world_path: Path):
-        self.get_metadata(world_path)
-        self.get_ranks(world_path)
-        self.get_derived_statistics()
+        self.parse_metadata(world_path)
+        self.parse_ranks(world_path)
 
     # TODO this will hopefully be done differently in the future
-    def get_metadata(self, world_path: Path):
+    def parse_metadata(self, world_path: Path):
+        """Parse metadata from the world file/path required for further processing."""
         with open(world_path / rankfile_name(0), "r") as f:
             rf0 = from_toml(RankFile, f.read())
             self.meta = WorldMeta(
@@ -166,19 +121,83 @@ class WorldData:
                 num_nodes=0,
             )
 
-    def get_ranks(self, world_path: Path):
-        self.ranks = list()
+    def parse_ranks(self, world_path: Path):
+        """Read data from rank files into multi-dimensional numpy arrays, which can then be used for plotting."""
         hostnames = set[str]()
+        rank_files = list[RankFile]()
+        wall_time = 0
+
         for i in range(self.meta.num_processes):
             with open(world_path / rankfile_name(i), "r") as f:
-                rank = Rank(from_toml(RankFile, f.read()))
-                hostnames.add(rank.general().hostname)
-                self.ranks.append(rank)
+                sender = from_toml(RankFile, f.read())
+                hostnames.add(sender.general.hostname)
+                rank_files.append(sender)
+                wall_time = max(wall_time, sender.general.wall_time)
+
+        self.wall_time = timedelta(microseconds=wall_time // 1000)
+        component_set = set[Component]()
+
+        for sender in rank_files:
+            for peer in sender.peers.values():
+                component_set.update(peer.components)
+
+        self.meta.components = frozenset(component_set)
+
+        occuring_sizes = {c: set[int]() for c in self.meta.components}
+        occuring_tags = {c: set[int]() for c in self.meta.components}
+        for sender in rank_files:
+            for peer in sender.peers.values():
+                for comp in self.meta.components:
+                    occuring_sizes[comp].update(
+                        peer.sent_sizes.get("exact", {}).get(comp, {}).keys()
+                    )
+                    occuring_tags[comp].update(peer.sent_tags.get(comp, {}).keys())
+
         self.meta.num_nodes = len(hostnames)
 
-    def get_derived_statistics(self):
-        self.total_bytes_sent = sum([rank.total_bytes_sent for rank in self.ranks])
-        self.total_msgs_sent = sum([rank.total_msgs_sent for rank in self.ranks])
-        self.wall_time = timedelta(
-            microseconds=max([rank.general().wall_time / 1000 for rank in self.ranks])
-        )
+        n = self.meta.num_processes
+        self.components = {}
+        for c in self.meta.components:
+            # .view() and .ravel() do not change/copy the array and are only necessary for typing
+            cd_occuring_sizes = (
+                np.array(sorted(occuring_sizes[c]), dtype=np.uint64).view().ravel()
+            )
+            cd_occuring_tags = (
+                np.array(sorted(occuring_tags[c]), dtype=np.int64).view().ravel()
+            )
+            cd = ComponentData(cd_occuring_sizes, cd_occuring_tags, n)
+            self.components[c] = cd
+
+        for comp_n in self.meta.components:
+            # Map from a given size/tag to its index in the relevant numpy array in self.rank_sizes/self.rank_tags respectively
+            tags_index_map = {
+                int(value): index
+                for index, value in enumerate(self.components[comp_n].occuring_tags)
+            }
+            sizes_index_map = {
+                int(value): index
+                for index, value in enumerate(self.components[comp_n].occuring_sizes)
+            }
+
+            for sender in rank_files:
+                from_rank = sender.general.own_rank
+                if sender.general.own_rank >= n:
+                    raise ValueError(f"Invalid own_rank {from_rank}>=num_proc.")
+
+                for receiver, peer in sender.peers.items():
+                    comp = self.components[comp_n]
+                    if receiver >= n:
+                        raise ValueError(
+                            f"Invalid peer {receiver}>=num_proc for rank {from_rank}."
+                        )
+                    for size, occurances in (
+                        peer.sent_sizes.get("exact", {}).get(comp_n, {}).items()
+                    ):
+                        size_index = sizes_index_map[size]
+                        comp.rank_sizes[from_rank, receiver, size_index] = occurances
+                        comp.total_bytes_sent += size * occurances
+                    for tags, occurances in peer.sent_tags.get(comp_n, {}).items():
+                        tag_index = tags_index_map[tags]
+                        comp.rank_tags[from_rank, receiver, tag_index] = occurances
+                    comp.rank_count[from_rank, receiver] = peer.sent_count[comp_n]
+                    comp.total_msgs_sent += peer.sent_count[comp_n]

@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from filter_view import INITIAL_GLOBAL_FILTERS, GlobalFilters
-from parser import WorldData
+from parser import Component, WorldData
 from plots import (
     plot_counts_2d,
     plot_msgs_matrix,
@@ -32,7 +32,7 @@ from plots import (
     plot_tags_px,
 )
 
-UpdateFn = Callable[[Figure, WorldData, GlobalFilters], None]
+UpdateFn = Callable[[Figure, WorldData, Component, GlobalFilters], None]
 
 
 @dataclass
@@ -66,9 +66,13 @@ class PlotViewer(QGroupBox):
     _plots: list[PlotTab] = list()
     _tab_widget: QTabWidget
     _filters: GlobalFilters
+    _component: Component
 
-    def __init__(self, world_data: WorldData, parent: QWidget | None = None):
+    def __init__(
+        self, world_data: WorldData, component: Component, parent: QWidget | None = None
+    ):
         super().__init__("Plot Viewer", parent)
+        self._component = component
         self._world_data = world_data
         self._filters = INITIAL_GLOBAL_FILTERS
         layout = QVBoxLayout(self)
@@ -96,7 +100,7 @@ class PlotViewer(QGroupBox):
 
         pt = PlotTab(title, update, canvas)
         self._plots.append(pt)
-        pt.update(canvas.figure, self._world_data, self._filters)
+        pt.update(canvas.figure, self._world_data, self._component, self._filters)
         if activate:
             self._tab_widget.setCurrentWidget(tabQWidget)
 
@@ -124,9 +128,10 @@ class PlotViewer(QGroupBox):
                         plotfn = plot_sizes_3d
             case RankPlotMetric.MESSAGE_COUNT:
                 plotfn = plot_counts_2d
+        # plotfn = plot_tags_3d  # TODO remove
         self.add_tab(
             tab_title,
-            lambda fig, wd, filters: plotfn(fig, rank, wd, filters),
+            lambda fig, wd, comp, filters: plotfn(fig, rank, wd, comp, filters),
             activate=True,
         )
 
@@ -154,7 +159,9 @@ class PlotViewer(QGroupBox):
     def _update_plots(self):
         for plot_tab in self._plots:
             plot_tab.canvas.figure.clear()
-            plot_tab.update(plot_tab.canvas.figure, self._world_data, self._filters)
+            plot_tab.update(
+                plot_tab.canvas.figure, self._world_data, self._component, self._filters
+            )
             plot_tab.canvas.draw_idle()
 
     @Slot(object)

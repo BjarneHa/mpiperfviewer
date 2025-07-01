@@ -1,75 +1,49 @@
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
-from filter_view import GlobalFilters
-from parser import WorldData
-
-
-# TODO refactor using numpy filter
-def _get_filtered_ranks(world_data: WorldData, filters: GlobalFilters):
-    return [
-        rank.general().own_rank
-        for rank in world_data.ranks
-        if filters.count.test(rank.total_msgs_sent)
-    ]
+from filter_view import GlobalFilters, RangeFilter
+from parser import Component, UInt64Array, WorldData
 
 
 # TODO code duplication
-def plot_size_matrix(fig: Figure, world_data: WorldData, filters: GlobalFilters):
-    ranks = list(range(world_data.meta.num_processes))
-    n = len(ranks)
-    matrix = np.zeros((n, n), dtype=np.uint64)
-    i = 0
-    for sender in world_data.ranks:
-        s = sender.general().own_rank
-        if s not in ranks:
-            continue
-        j = 0
-        for r, sent in sender.bytes_sent().items():
-            if r not in ranks:
-                continue
-            matrix[i][j] = sent
-            j += 1
-        i += 1
+def plot_size_matrix(
+    fig: Figure, world_data: WorldData, component: Component, filters: GlobalFilters
+):
+    component_data = world_data.components[component]
+    matrix_dims = component_data.rank_sizes.shape[:2]
+    matrix = np.zeros(matrix_dims, dtype=np.uint64).view()
+    for sender in range(matrix_dims[0]):
+        for receiver in range(matrix_dims[1]):
+            for i, size in enumerate(component_data.occuring_sizes):
+                matrix[sender, receiver] += (
+                    size * component_data.rank_sizes[sender, receiver, i]
+                )
 
     plot_matrix(
         "Communication Matrix (message size)",
         "bytes sent",
         fig,
         matrix,
-        ranks,
+        list(range(world_data.meta.num_processes)),
         "Reds",
     )
 
 
 # TODO code duplication
-def plot_msgs_matrix(fig: Figure, world_data: WorldData, filters: GlobalFilters):
-    ranks = list(range(world_data.meta.num_processes))
-    n = len(ranks)
-    matrix = np.zeros((n, n), dtype=np.uint64)
-    i = 0
-    for sender in world_data.ranks:
-        s = sender.general().own_rank
-        if s not in ranks:
-            continue
-        j = 0
-        for r, sent in sender.msgs_sent().items():
-            if r not in ranks:
-                continue
-            matrix[i][j] = sent
-            j += 1
-        i += 1
-
+def plot_msgs_matrix(
+    fig: Figure, world_data: WorldData, component: Component, filters: GlobalFilters
+):
+    component_data = world_data.components[component]
     plot_matrix(
         "Communication Matrix (message count)",
         "messages sent",
         fig,
-        matrix,
-        ranks,
+        component_data.rank_count,
+        list(range(world_data.meta.num_processes)),
         "Blues",
     )
 
@@ -78,7 +52,7 @@ def plot_matrix(
     title: str,
     legend_title: str,
     fig: Figure,
-    matrix: NDArray[np.uint64],
+    matrix: UInt64Array[tuple[int, int]],
     ranks: list[int],
     cmap: str = "viridis",
     seperators: list[int] | None = None,
@@ -103,52 +77,61 @@ def plot_matrix(
     ax.set_title(title)
 
 
+def generate_3d_data(
+    rank: int,
+    world_data: WorldData,
+    component: Component,
+    metrics_legend: NDArray[Any],
+    metrics_data: UInt64Array[tuple[int, int, int]],
+    filter: RangeFilter,
+):
+    component_data = world_data.components[component]
+
+    # Only show procs that are actually communicated with
+    procs = np.arange(0, world_data.meta.num_processes, dtype=np.uint64)
+    procs_filter = component_data.rank_count[rank, :] > 0
+    procs = procs[procs_filter]
+
+    # Apply range filter to tags
+    metric = metrics_legend
+    metric_min = filter.min or np.iinfo(metric.dtype).min
+    metric_max = filter.max or np.iinfo(metric.dtype).max
+    metric_filter = (metric_min <= metric) & (metric <= metric_max)
+    metric = metric[metric_filter]
+
+    occurances = metrics_data[rank, procs_filter, :][:, metric_filter].T
+
+    # Collect data from collected dict into lists for plot
+    xticks = np.arange(0, len(procs))
+    yticks = np.arange(0, len(metric))
+
+    return (occurances, xticks, yticks, procs, metric)
+
+
 def plot_tags_3d(
     fig: Figure,
     rank: int,
     world_data: WorldData,
+    component: Component,
     filters: GlobalFilters,
 ):
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
-
-    cur_rank = world_data.ranks[rank]
-    tags = world_data.ranks[rank].tags(filters=filters)
-    procs = set(
-        [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
+    component_data = world_data.components[component]
+    tag_occurances, xticks, yticks, xlabels, ylabels = generate_3d_data(
+        rank,
+        world_data,
+        component,
+        component_data.occuring_tags,
+        component_data.rank_tags,
+        filters.tags,
     )
 
-    # TODO move into parser.py?
-    unique_tags: set[int] = set()
-    for peer_tags in tags.values():
-        unique_tags.update(peer_tags.keys())
-
-    # Collect data from collected dict into lists for plot
-    xticks = np.arange(0, len(procs))
-    yticks = np.arange(0, len(unique_tags))
-
-    x = list[float]()
-    y = list[float]()
-    z = list[float]()
-    dx = list[float]()
-    dy = list[float]()
-    dz = list[float]()
-
-    # Also works without casting to str, but produces type error
-    # Perhaps this should e dealt with differently
-    xlabels = [str(i) for i in sorted(procs)]
-    ylabels = [str(i) for i in sorted(unique_tags)]
-
-    proc_to_pos = dict(zip(sorted(procs), xticks))
-    tag_to_pos = dict(zip(sorted(unique_tags), yticks))
-
-    for proc, pairs in tags.items():
-        for tag, count in pairs.items():
-            x.append(proc_to_pos[proc] - 0.4)
-            y.append(tag_to_pos[tag] - 0.4)
-            z.append(0)
-            dx.append(0.8)
-            dy.append(0.8)
-            dz.append(count)
+    _xx, _yy = np.meshgrid(xticks, yticks)
+    x, y = _xx.ravel() - 0.4, _yy.ravel() - 0.4
+    z = np.zeros_like(x)
+    dx = np.ones_like(x) * 0.8
+    dy = np.ones_like(y) * 0.8
+    dz = tag_occurances.ravel()
 
     _ = ax.bar3d(x, y, z, dx, dy, dz, color="green")
     _ = ax.set_xticks(xticks, labels=xlabels)
@@ -163,50 +146,26 @@ def plot_sizes_3d(
     fig: Figure,
     rank: int,
     world_data: WorldData,
+    component: Component,
     filters: GlobalFilters,
 ):
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
-    cur_rank = world_data.ranks[rank]
-    sizes = cur_rank.exact_sizes(filters=filters)
-    procs = set(
-        [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
-    )  # TODO is this expected behavior?
+    component_data = world_data.components[component]
+    size_occurances, xticks, yticks, xlabels, ylabels = generate_3d_data(
+        rank,
+        world_data,
+        component,
+        component_data.occuring_sizes,
+        component_data.rank_sizes,
+        filters.tags,
+    )
 
-    # TODO move into parser.py?
-    unique_sizes: set[int] = set()
-    for peer_tags in sizes.values():
-        unique_sizes.update(
-            peer_tags.keys()
-        )  # TODO filter out sizes that are never sent?
-
-    # Collect data from collected dict into lists for plot
-    xticks = np.arange(0, len(procs))
-    yticks = np.arange(0, len(unique_sizes))
-
-    x = list[float]()
-    y = list[float]()
-    z = list[float]()
-
-    dx = list[float]()
-    dy = list[float]()
-    dz = list[float]()
-
-    # Also works without casting to str, but produces type error
-    # Perhaps this should e dealt with differently
-    xlabels = [str(i) for i in sorted(procs)]
-    ylabels = [str(i) for i in sorted(unique_sizes)]
-
-    proc_to_pos = dict(zip(sorted(procs), xticks))
-    size_to_pos = dict(zip(sorted(unique_sizes), yticks))
-
-    for proc, pairs in sizes.items():
-        for size, count in pairs.items():
-            x.append(proc_to_pos[proc] - 0.4)
-            y.append(size_to_pos[size] - 0.4)
-            z.append(0)
-            dx.append(0.8)
-            dy.append(0.8)
-            dz.append(count)
+    _xx, _yy = np.meshgrid(xticks, yticks)
+    x, y = _xx.ravel() - 0.4, _yy.ravel() - 0.4
+    z = np.zeros_like(x)
+    dx = np.ones_like(x) * 0.8
+    dy = np.ones_like(y) * 0.8
+    dz = size_occurances.ravel()
 
     _ = ax.bar3d(x, y, z, dx, dy, dz, color="gold")
     _ = ax.set_xticks(xticks, labels=xlabels)
@@ -221,12 +180,14 @@ def plot_counts_2d(
     fig: Figure,
     rank: int,
     world_data: WorldData,
+    component: Component,
     filters: GlobalFilters,
 ):
-    counts = world_data.ranks[rank].msgs_sent(filter=filters.count)
     ax = fig.add_subplot()
+    x = list(range(world_data.meta.num_processes))
+    y = world_data.components[component].rank_count[rank, :]
 
-    _ = ax.bar(list(counts.keys()), list(counts.values()), color="teal", width=0.8)
+    _ = ax.bar(x, y, color="teal", width=0.8)
     _ = ax.set_xlabel("MPI_COMM_WORLD Rank")
     _ = ax.set_ylabel("Messages sent")
     _ = ax.set_title(f"Messages sent to peers by Rank {rank}")
@@ -239,39 +200,21 @@ def plot_tags_px(
     fig: Figure,
     rank: int,
     world_data: WorldData,
+    component: Component,
     filters: GlobalFilters,
 ):
     ax = fig.add_subplot()
-    cur_rank = world_data.ranks[rank]
-    tags = world_data.ranks[rank].tags(filters=filters)
-    procs = set(
-        [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
+    component_data = world_data.components[component]
+    tag_occurances, xticks, yticks, xlabels, ylabels = generate_3d_data(
+        rank,
+        world_data,
+        component,
+        component_data.occuring_tags,
+        component_data.rank_tags,
+        filters.tags,
     )
 
-    # TODO move into parser.py?
-    unique_tags: set[int] = set()
-    for peer_tags in tags.values():
-        unique_tags.update(peer_tags.keys())
-
-    # Collect data from collected dict into lists for plot
-    xticks = np.arange(0, len(procs))
-    yticks = np.arange(0, len(unique_tags))
-
-    # Also works without casting to str, but produces type error
-    # Perhaps this should e dealt with differently
-    xlabels = [str(i) for i in sorted(procs)]
-    ylabels = [str(i) for i in sorted(unique_tags)]
-
-    proc_to_pos = dict(zip(sorted(procs), xticks))
-    tag_to_pos = dict(zip(sorted(unique_tags), yticks))
-
-    hmap = np.zeros((len(unique_tags), len(procs)), dtype=np.uint64)
-
-    for proc, pairs in tags.items():
-        for tag, count in pairs.items():
-            hmap[tag_to_pos[tag]][proc_to_pos[proc]] = count
-
-    img = ax.imshow(hmap, cmap="Greens", norm="log", aspect="auto")
+    img = ax.imshow(tag_occurances, cmap="Greens", norm="log", aspect="auto")
 
     _ = ax.set_xticks(xticks, labels=xlabels)
     _ = ax.set_yticks(yticks, labels=ylabels)
@@ -288,41 +231,21 @@ def plot_sizes_px(
     fig: Figure,
     rank: int,
     world_data: WorldData,
+    component: Component,
     filters: GlobalFilters,
 ):
     ax = fig.add_subplot()
-    cur_rank = world_data.ranks[rank]
-    sizes = cur_rank.exact_sizes(filters=filters)
-    procs = set(
-        [rank for rank, v in cur_rank.exact_sizes().items() if sum(v.values()) > 0]
-    )  # TODO is this expected behavior?
+    component_data = world_data.components[component]
+    size_occurances, xticks, yticks, xlabels, ylabels = generate_3d_data(
+        rank,
+        world_data,
+        component,
+        component_data.occuring_sizes,
+        component_data.rank_sizes,
+        filters.tags,
+    )
 
-    # TODO move into parser.py?
-    unique_sizes: set[int] = set()
-    for peer_tags in sizes.values():
-        unique_sizes.update(
-            peer_tags.keys()
-        )  # TODO filter out sizes that are never sent?
-
-    # Collect data from collected dict into lists for plot
-    xticks = np.arange(0, len(procs))
-    yticks = np.arange(0, len(unique_sizes))
-
-    # Also works without casting to str, but produces type error
-    # Perhaps this should e dealt with differently
-    xlabels = [str(i) for i in sorted(procs)]
-    ylabels = [str(i) for i in sorted(unique_sizes)]
-
-    proc_to_pos = dict(zip(sorted(procs), xticks))
-    size_to_pos = dict(zip(sorted(unique_sizes), yticks))
-
-    hmap = np.zeros((len(unique_sizes), len(procs)), dtype=np.uint64)
-
-    for proc, pairs in sizes.items():
-        for size, count in pairs.items():
-            hmap[size_to_pos[size]][proc_to_pos[proc]] = count
-
-    img = ax.imshow(hmap, cmap="Oranges", norm="log", aspect="auto")
+    img = ax.imshow(size_occurances, cmap="Oranges", norm="log", aspect="auto")
 
     _ = ax.set_xticks(xticks, labels=xlabels)
     _ = ax.set_yticks(yticks, labels=ylabels)
