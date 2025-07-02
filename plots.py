@@ -84,28 +84,31 @@ def generate_3d_data(
     metrics_legend: NDArray[Any],
     metrics_data: UInt64Array[tuple[int, int, int]],
     filter: RangeFilter,
+    count_filter: RangeFilter,
 ):
     component_data = world_data.components[component]
+    occurances = metrics_data[rank, :, :]
 
     # Only show procs that are actually communicated with
+    # Applies count filter (before size/tags filter, perhaps this should be changable)
     procs = np.arange(0, world_data.meta.num_processes, dtype=np.uint64)
-    procs_filter = component_data.rank_count[rank, :] > 0
-    procs = procs[procs_filter]
+    procs_filter_array = (component_data.rank_count[rank, :] > 0) & (
+        count_filter.apply(occurances.sum(1))
+    )
+    procs = procs[procs_filter_array]
 
     # Apply range filter to tags
     metric = metrics_legend
-    metric_min = filter.min or np.iinfo(metric.dtype).min
-    metric_max = filter.max or np.iinfo(metric.dtype).max
-    metric_filter = (metric_min <= metric) & (metric <= metric_max)
-    metric = metric[metric_filter]
+    metric_filter_array = filter.apply(metric)
+    metric = metric[metric_filter_array]
 
-    occurances = metrics_data[rank, procs_filter, :][:, metric_filter].T
+    occurances = occurances[procs_filter_array, :][:, metric_filter_array]
 
     # Collect data from collected dict into lists for plot
     xticks = np.arange(0, len(procs))
     yticks = np.arange(0, len(metric))
 
-    return (occurances, xticks, yticks, procs, metric)
+    return (occurances.T, xticks, yticks, procs, metric)
 
 
 def plot_tags_3d(
@@ -124,6 +127,7 @@ def plot_tags_3d(
         component_data.occuring_tags,
         component_data.rank_tags,
         filters.tags,
+        filters.count,
     )
 
     _xx, _yy = np.meshgrid(xticks, yticks)
@@ -157,7 +161,8 @@ def plot_sizes_3d(
         component,
         component_data.occuring_sizes,
         component_data.rank_sizes,
-        filters.tags,
+        filters.size,
+        filters.count,
     )
 
     _xx, _yy = np.meshgrid(xticks, yticks)
@@ -184,16 +189,18 @@ def plot_counts_2d(
     filters: GlobalFilters,
 ):
     ax = fig.add_subplot()
-    x = list(range(world_data.meta.num_processes))
+    x = np.arange(0, world_data.meta.num_processes)
     y = world_data.components[component].rank_count[rank, :]
+    count_filter = filters.count.apply(y)
+    x = x[count_filter]
+    y = y[count_filter]
+    xticks = np.arange(0, len(x))
 
     _ = ax.bar(x, y, color="teal", width=0.8)
+    _ = ax.set_xticks(xticks, labels=x)
     _ = ax.set_xlabel("MPI_COMM_WORLD Rank")
     _ = ax.set_ylabel("Messages sent")
     _ = ax.set_title(f"Messages sent to peers by Rank {rank}")
-
-    # Idea is good, but looks weird for larger numbers
-    # ax_counts.bar_label(p, label_type="center")
 
 
 def plot_tags_px(
@@ -212,6 +219,7 @@ def plot_tags_px(
         component_data.occuring_tags,
         component_data.rank_tags,
         filters.tags,
+        filters.count,
     )
 
     img = ax.imshow(tag_occurances, cmap="Greens", norm="log", aspect="auto")
@@ -242,7 +250,8 @@ def plot_sizes_px(
         component,
         component_data.occuring_sizes,
         component_data.rank_sizes,
-        filters.tags,
+        filters.size,
+        filters.count,
     )
 
     img = ax.imshow(size_occurances, cmap="Oranges", norm="log", aspect="auto")

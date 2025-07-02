@@ -1,7 +1,8 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import override
+from typing import Any, override
 
+import numpy as np
+from numpy.typing import NDArray
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
@@ -64,13 +65,7 @@ class RangeFilterWidget(QObject):
         return RangeFilter(min, max)
 
 
-class Filter(ABC):
-    @abstractmethod
-    def test(self, x: int) -> bool:
-        pass
-
-
-class RangeFilter(Filter):
+class RangeFilter:
     min: int | None
     max: int | None
 
@@ -90,9 +85,11 @@ class RangeFilter(Filter):
             and self.max == other.max
         )
 
-    @override
-    def test(self, x: int):
-        return (self.min or x) <= x and x <= (self.max or x)
+    def apply(self, metric: NDArray[Any]):
+        metric_min = self.min or np.iinfo(metric.dtype).min
+        metric_max = self.max or np.iinfo(metric.dtype).max
+        filter = (metric_min <= metric) & (metric <= metric_max)
+        return filter
 
 
 UNFILTERED = RangeFilter()
