@@ -231,6 +231,7 @@ class RankView(QGroupBox):
         elif self._type_box.currentText() == "Bar Chart":
             self._type_box.clear()
             self._type_box.addItem(RankPlotType.PIXEL_PLOT)
+            self._type_box.addItem(RankPlotType.BAR3D)
 
 
 class MatrixView(QGroupBox):
