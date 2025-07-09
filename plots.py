@@ -5,7 +5,7 @@ from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
-from filter_view import GlobalFilters, RangeFilter
+from filter_view import Filter, GlobalFilters
 from parser import Component, UInt64Array, WorldData
 
 
@@ -83,8 +83,8 @@ def generate_3d_data(
     component: Component,
     metrics_legend: NDArray[Any],
     metrics_data: UInt64Array[tuple[int, int, int]],
-    filter: RangeFilter,
-    count_filter: RangeFilter,
+    filter: Filter,
+    count_filter: Filter,
 ):
     component_data = world_data.components[component]
     occurances = metrics_data[rank, :, :]
