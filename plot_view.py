@@ -1,25 +1,18 @@
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import Callable, final
+from typing import Callable
 
 from matplotlib.backend_bases import FigureCanvasBase
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QIntValidator
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
-    QComboBox,
-    QGridLayout,
     QGroupBox,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QTabBar,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from create_views import MatrixMetric, RankPlotMetric, RankPlotType
 from filter_view import INITIAL_GLOBAL_FILTERS, GlobalFilters
 from parser import Component, WorldData
 from plots import (
@@ -40,22 +33,6 @@ class PlotTab:
     title: str
     update: UpdateFn
     canvas: FigureCanvasBase
-
-
-class MatrixMetric(StrEnum):
-    BYTES_SENT = "bytes sent"
-    MESSAGES_SENT = "messages sent"
-
-
-class RankPlotMetric(StrEnum):
-    SENT_SIZES = "sent sizes"
-    MESSAGE_COUNT = "message count"
-    TAGS = "tags"
-
-
-class RankPlotType(StrEnum):
-    PIXEL_PLOT = "Pixel Plot"
-    BAR3D = "3D Bar"
 
 
 INITIAL_TABS = ["total size", "msg count"]
@@ -81,7 +58,6 @@ class PlotViewer(QGroupBox):
         self._tab_widget = QTabWidget(self, tabsClosable=True)
         layout.addWidget(self._tab_widget)
         self._initialize_tabs()
-        self.add_creation_tab()
         self._tab_widget.tabCloseRequested.connect(self.close_tab)
 
     def _initialize_tabs(self):
@@ -143,18 +119,6 @@ class PlotViewer(QGroupBox):
             case MatrixMetric.MESSAGES_SENT:
                 self.add_tab("message count", plot_msgs_matrix, activate=True)
 
-    def add_creation_tab(self):
-        ct = CreationTab(self, self._world_data)
-        index = self._tab_widget.addTab(ct, "+")
-        self._tab_widget.tabBar().setTabButton(
-            index, QTabBar.ButtonPosition.LeftSide, None
-        )
-        self._tab_widget.tabBar().setTabButton(
-            index, QTabBar.ButtonPosition.RightSide, None
-        )
-        _ = ct.matrix_view.create_tab.connect(self.add_matrix_plot)
-        _ = ct.rank_view.create_tab.connect(self.add_rank_plot)
-
     # If filters is not None, only plots related to the filters will be redrawn
     def _update_plots(self):
         for plot_tab in self._plots:
@@ -168,101 +132,3 @@ class PlotViewer(QGroupBox):
     def filters_changed(self, filters: GlobalFilters):
         self._filters = filters
         self._update_plots()
-
-
-@final
-class CreationTab(QWidget):
-    def __init__(self, parent: QWidget, world_data: WorldData):
-        super().__init__(parent)
-        layout = QGridLayout(self)
-        self.matrix_view = MatrixView(self)
-        self.rank_view = RankView(self, world_data)
-        layout.addWidget(
-            self.matrix_view, 0, 0, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
-        layout.addWidget(self.rank_view, 0, 1, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-
-class RankView(QGroupBox):
-    _rank_edit: QLineEdit
-    _metric_box: QComboBox
-    _type_box: QComboBox
-    create_tab: Signal = Signal(int, str, str)
-
-    def __init__(self, parent: CreationTab, world_data: WorldData):
-        super().__init__("Rank Statistics", parent)
-        layout = QGridLayout(self)
-        layout.addWidget(QLabel("Rank"), 0, 0)
-        max_rank = world_data.meta.num_processes - 1
-        rank_placeholder_text = f"0-{max_rank}"
-        self._rank_edit = QLineEdit(self, placeholderText=rank_placeholder_text)
-        self._rank_edit.setValidator(QIntValidator(self, bottom=0, top=max_rank))
-        self._rank_edit.rect
-        layout.addWidget(self._rank_edit, 0, 1)
-        layout.addWidget(QLabel("Metric"), 1, 0)
-        self._metric_box = QComboBox(self)
-        for metric in RankPlotMetric:
-            self._metric_box.addItem(metric)
-        layout.addWidget(self._metric_box, 1, 1)
-        layout.addWidget(QLabel("Plot type"), 2, 0)
-        self._type_box = QComboBox(self)
-        for metric in RankPlotType:
-            self._type_box.addItem(metric)
-        layout.addWidget(self._type_box, 2, 1)
-        create_button = QPushButton("Create")
-        layout.addWidget(create_button, 3, 0, 1, 2)
-        create_button.clicked.connect(self.on_create)
-        self._metric_box.currentTextChanged.connect(self.on_select_metric)
-
-    @Slot()
-    def on_create(self):
-        rank = int(
-            self._rank_edit.text()
-        )  # TODO valueerror when empty => user feedback
-        metric = self._metric_box.currentText()
-        type = self._type_box.currentText()
-        self.create_tab.emit(rank, metric, type)
-
-    @Slot()
-    def on_select_metric(self, selected: str):
-        if selected == RankPlotMetric.MESSAGE_COUNT:
-            self._type_box.clear()
-            self._type_box.addItem("Bar Chart")
-        elif self._type_box.currentText() == "Bar Chart":
-            self._type_box.clear()
-            self._type_box.addItem(RankPlotType.PIXEL_PLOT)
-            self._type_box.addItem(RankPlotType.BAR3D)
-
-
-class MatrixView(QGroupBox):
-    _metric_box: QComboBox
-    _group_by_box: QComboBox
-    create_tab: Signal = Signal(str, str)
-
-    def __init__(self, parent: CreationTab):
-        super().__init__("Global Communication Matrix", parent)
-        layout = QGridLayout(self)
-        layout.addWidget(QLabel("Metric:"), 0, 0)
-        self._metric_box = QComboBox(self)
-        for m in MatrixMetric:
-            self._metric_box.addItem(m.value)
-        layout.addWidget(self._metric_box, 0, 1)
-        group_by_label = QLabel("Group by:")
-        layout.addWidget(group_by_label, 1, 0)
-        group_by_label.hide()  # TODO remove
-        self._group_by_box = QComboBox(self)
-        for item in ["Rank", "Core", "Socket", "Node"]:
-            self._group_by_box.addItem(item)
-        layout.addWidget(self._group_by_box, 1, 1)
-        self._group_by_box.hide()  # TODO remove
-        create_button = QPushButton("Create")
-        layout.addWidget(create_button, 2, 0, 1, 2)
-        create_button.clicked.connect(self.on_create)
-
-    @Slot()
-    def on_create(self):
-        metric = (
-            self._metric_box.currentText()
-        )  # TODO valueerror when empty => user feedback
-        group_by = self._group_by_box.currentText()
-        self.create_tab.emit(metric, group_by)

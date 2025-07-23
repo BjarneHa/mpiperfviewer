@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from create_views import CreateMatrixView, CreateRankView
 from filter_view import FilterView
 from parser import WorldData
 from plot_view import PlotViewer
@@ -20,7 +21,7 @@ class ApplicationWindow(QWidget):
     def __init__(self):
         super().__init__()
         while True:
-            file = QFileDialog.getExistingDirectory(self)  # TODO FileNotFoundError
+            file = QFileDialog.getExistingDirectory(self)  # TODO FileNotFoundError, ESC
             world_data = WorldData(Path(file))
 
             component, ok = QInputDialog.getItem(
@@ -38,11 +39,17 @@ class ApplicationWindow(QWidget):
         self._left_col = QVBoxLayout()
         self.statistics_view = StatisticsView(world_data, component, self)
         self.filter_view = FilterView(self)
+        self.create_matrix_view = CreateMatrixView(self)
+        self.create_rank_view = CreateRankView(world_data, self)
         self._left_col.addWidget(self.statistics_view)
+        self._left_col.addWidget(self.create_matrix_view)
+        self._left_col.addWidget(self.create_rank_view)
         self._left_col.addWidget(self.filter_view)
         self._left_col.addStretch()
         self._right_col = QVBoxLayout()
         self.plot_viewer = PlotViewer(world_data, component, self)
+        self.create_matrix_view.create_tab.connect(self.plot_viewer.add_matrix_plot)
+        self.create_rank_view.create_tab.connect(self.plot_viewer.add_rank_plot)
         self._right_col.addWidget(self.plot_viewer)
         self.filter_view.filters_changed.connect(self.plot_viewer.filters_changed)
         row_layout.addLayout(self._left_col, 0)
