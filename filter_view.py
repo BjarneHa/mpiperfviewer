@@ -29,10 +29,16 @@ class RangeFilterObject(QObject):
     _max_edit: QLineEdit
 
     def __init__(
-        self, filter: str, i: int, layout: QGridLayout, parent: QWidget | None = None
+        self,
+        filter: str,
+        description: str,
+        i: int,
+        layout: QGridLayout,
+        parent: QWidget | None = None,
     ):
         super().__init__(parent)
         self._checkbox = QCheckBox(filter, parent)
+        self._checkbox.setToolTip(description)
         _ = self._checkbox.checkStateChanged.connect(self._check_changed)
         layout.addWidget(self._checkbox, i * 2, 0, 1, 5)
         self._min_edit = QLineEdit(parent, placeholderText="-∞")
@@ -279,7 +285,9 @@ class TagFilterObject(QObject):
 
     def __init__(self, i: int, layout: QGridLayout, parent: QWidget | None = None):
         super().__init__(parent)
+        tags_description = "Select specific ranges of tags to plot."
         self._checkbox = QCheckBox("tags", parent)
+        self._checkbox.setToolTip(tags_description)
         _ = self._checkbox.checkStateChanged.connect(self._check_changed)
         layout.addWidget(self._checkbox, i * 2, 0, 1, 5)
 
@@ -382,8 +390,14 @@ class FilterView(QGroupBox):
         layout = QVBoxLayout(self)
         range_layout = QGridLayout()
         layout.addLayout(range_layout)
-        self._size_filter = RangeFilterObject("size", 0, range_layout, self)
-        self._count_filter = RangeFilterObject("count", 1, range_layout, self)
+        size_description = "Select a specific range of sizes to plot."
+        count_description = "Filter out ranks and sizes/tags whose max entry is not within the given range."
+        self._size_filter = RangeFilterObject(
+            "size", size_description, 0, range_layout, self
+        )
+        self._count_filter = RangeFilterObject(
+            "max count", count_description, 1, range_layout, self
+        )
         self._tags_filter = TagFilterObject(2, range_layout, self)
         self._apply_button = QPushButton("Apply")
         layout.addWidget(self._apply_button)
