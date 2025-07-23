@@ -18,13 +18,17 @@ from statistics_view import StatisticsView
 
 @final
 class ApplicationWindow(QWidget):
-    def __init__(self):
+    def __init__(self, args: list[str]):
         super().__init__()
-        while True:
-            file = QFileDialog.getExistingDirectory(self)  # TODO FileNotFoundError, ESC
-            world_data = WorldData(Path(file))
+        file = (
+            args[0] if len(args) > 0 else QFileDialog.getExistingDirectory(self)
+        )  # TODO FileNotFoundError, ESC
+        world_data = WorldData(Path(file))
 
-            component, ok = QInputDialog.getItem(
+        component, ok = (
+            (args[1], True)
+            if len(args) > 1 and args[1] in world_data.components.keys()
+            else QInputDialog.getItem(
                 self,
                 "Select which component to view.",
                 "Component",
@@ -32,8 +36,9 @@ class ApplicationWindow(QWidget):
                 0,
                 False,
             )
-            if ok:
-                break
+        )
+        if not ok:
+            raise Exception("User did not choose a component")
 
         row_layout = QHBoxLayout(self)
         self._left_col = QVBoxLayout()
