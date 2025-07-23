@@ -125,26 +125,6 @@ class ExactFilter(Filter):
         return data == self.n
 
 
-# class TagFilter(QWidget):
-#     _checkbox: QCheckBox
-#     _radio_include: QRadioButton
-#     _radio_exclude: QRadioButton
-
-#     def __init__(self, parent: QWidget | None = None):
-#         super().__init__(parent)
-#         self._radio_include = QRadioButton()
-#         self._radio_exclude = QRadioButton()
-#         # self._checkbox = QCheckBox(filter, parent)
-#         _ = self._checkbox.checkStateChanged.connect(self._check_changed)
-#         # layout.addWidget(self._checkbox, i * 2, 0, 1, 5)
-
-#     @Slot()
-#     def _check_changed(self, value: Qt.CheckState):
-#         checked = value == Qt.CheckState.Checked
-
-#     def state(self):
-#         pass
-
 DISCRETE_MULTIRANGE_REGEXP = r"|(-?\d+|\[-?\d+;-?\d+\])(,(-?\d+|\[-?\d+;-?\d+\]))*"
 
 COLLECTIVES = [
