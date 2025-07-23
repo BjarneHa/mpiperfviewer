@@ -89,20 +89,23 @@ def generate_3d_data(
     component_data = world_data.components[component]
     occurances = metrics_data[rank, :, :]
 
-    # Only show procs that are actually communicated with
-    # Applies count filter (before size/tags filter, perhaps this should be changable)
-    procs = np.arange(0, world_data.meta.num_processes, dtype=np.uint64)
-    procs_filter_array = (component_data.rank_count[rank, :] > 0) & (
-        count_filter.apply(occurances.max(1))
-    )
-    procs = procs[procs_filter_array]
-
     # Apply range filter to tags
     metric = metrics_legend
     metric_filter_array = filter.apply(metric)
     metric = metric[metric_filter_array]
 
-    occurances = occurances[procs_filter_array, :][:, metric_filter_array]
+    occurances = occurances[:, metric_filter_array]
+
+    # Only show procs that are actually communicated with
+    # Applies count filter (after size/tags filter, perhaps this should be changable)
+    procs = np.arange(0, world_data.meta.num_processes, dtype=np.uint64)
+    procs_count_filter_array = (component_data.rank_count[rank, :] > 0) & (
+        count_filter.apply(occurances.max(1))
+    )
+    metric_count_filter_array = count_filter.apply(occurances.max(0))
+    procs = procs[procs_count_filter_array]
+    metric = metric[metric_count_filter_array]
+    occurances = occurances[procs_count_filter_array, :][:, metric_count_filter_array]
 
     # Collect data from collected dict into lists for plot
     xticks = np.arange(0, len(procs))
