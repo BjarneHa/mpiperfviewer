@@ -93,7 +93,7 @@ def generate_3d_data(
     # Applies count filter (before size/tags filter, perhaps this should be changable)
     procs = np.arange(0, world_data.meta.num_processes, dtype=np.uint64)
     procs_filter_array = (component_data.rank_count[rank, :] > 0) & (
-        count_filter.apply(occurances.sum(1))
+        count_filter.apply(occurances.max(1))
     )
     procs = procs[procs_filter_array]
 
