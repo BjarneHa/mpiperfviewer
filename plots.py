@@ -5,13 +5,13 @@ from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
-from filter_view import Filter, GlobalFilters
+from filter_view import Filter, FilterState
 from parser import Component, UInt64Array, WorldData
 
 
 # TODO code duplication
 def plot_size_matrix(
-    fig: Figure, world_data: WorldData, component: Component, filters: GlobalFilters
+    fig: Figure, world_data: WorldData, component: Component, filters: FilterState
 ):
     component_data = world_data.components[component]
     matrix_dims = component_data.rank_sizes.shape[:2]
@@ -35,7 +35,7 @@ def plot_size_matrix(
 
 # TODO code duplication
 def plot_msgs_matrix(
-    fig: Figure, world_data: WorldData, component: Component, filters: GlobalFilters
+    fig: Figure, world_data: WorldData, component: Component, filters: FilterState
 ):
     component_data = world_data.components[component]
     plot_matrix(
@@ -119,7 +119,7 @@ def plot_tags_3d(
     rank: int,
     world_data: WorldData,
     component: Component,
-    filters: GlobalFilters,
+    filters: FilterState,
 ):
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
     component_data = world_data.components[component]
@@ -154,7 +154,7 @@ def plot_sizes_3d(
     rank: int,
     world_data: WorldData,
     component: Component,
-    filters: GlobalFilters,
+    filters: FilterState,
 ):
     ax = cast(Axes3D, fig.add_subplot(projection="3d"))  # Poor typing from mpl
     component_data = world_data.components[component]
@@ -189,7 +189,7 @@ def plot_counts_2d(
     rank: int,
     world_data: WorldData,
     component: Component,
-    filters: GlobalFilters,
+    filters: FilterState,
 ):
     ax = fig.add_subplot()
     x = np.arange(0, world_data.meta.num_processes)
@@ -211,7 +211,7 @@ def plot_tags_px(
     rank: int,
     world_data: WorldData,
     component: Component,
-    filters: GlobalFilters,
+    filters: FilterState,
 ):
     ax = fig.add_subplot()
     component_data = world_data.components[component]
@@ -243,7 +243,7 @@ def plot_sizes_px(
     rank: int,
     world_data: WorldData,
     component: Component,
-    filters: GlobalFilters,
+    filters: FilterState,
 ):
     ax = fig.add_subplot()
     component_data = world_data.components[component]

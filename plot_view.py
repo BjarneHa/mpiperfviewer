@@ -7,13 +7,14 @@ from matplotlib.figure import Figure
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
     QGroupBox,
+    QHBoxLayout,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from create_views import MatrixMetric, RankPlotMetric, RankPlotType
-from filter_view import INITIAL_GLOBAL_FILTERS, GlobalFilters
+from filter_view import FilterState, FilterView
 from parser import Component, WorldData
 from plots import (
     plot_counts_2d,
@@ -25,7 +26,7 @@ from plots import (
     plot_tags_px,
 )
 
-UpdateFn = Callable[[Figure, WorldData, Component, GlobalFilters], None]
+UpdateFn = Callable[[Figure, WorldData, Component, FilterState], None]
 
 
 @dataclass
@@ -33,6 +34,8 @@ class PlotTab:
     title: str
     update: UpdateFn
     canvas: FigureCanvasBase
+    filters: FilterState
+    filter_view: FilterView
 
 
 INITIAL_TABS = ["total size", "msg count"]
@@ -41,8 +44,8 @@ INITIAL_TABS = ["total size", "msg count"]
 class PlotViewer(QGroupBox):
     _world_data: WorldData
     _plots: list[PlotTab] = list()
+    _tabs_by_filter_view: dict[FilterView, PlotTab] = dict()
     _tab_widget: QTabWidget
-    _filters: GlobalFilters
     _component: Component
 
     def __init__(
@@ -51,7 +54,6 @@ class PlotViewer(QGroupBox):
         super().__init__("Plot Viewer", parent)
         self._component = component
         self._world_data = world_data
-        self._filters = INITIAL_GLOBAL_FILTERS
         layout = QVBoxLayout(self)
         # mplstyle.use("fast")
 
@@ -66,17 +68,30 @@ class PlotViewer(QGroupBox):
 
     def add_tab(self, title: str, update: UpdateFn, activate: bool = False):
         tabQWidget = QWidget(self._tab_widget)
-        layout = QVBoxLayout(tabQWidget)
-        tabQWidget.setLayout(layout)
+        layout = QHBoxLayout(tabQWidget)
+        plot_box = QGroupBox("Plot", tabQWidget)
+        filter_view = FilterView(tabQWidget)
+        filter_view.filters_changed.connect(self.filters_changed)
+        layout.addWidget(plot_box, stretch=1)
+        layout.addWidget(filter_view, stretch=0)
+        plot_layout = QVBoxLayout(plot_box)
+        tabQWidget.setLayout(plot_layout)
         _ = self._tab_widget.insertTab(len(self._plots), tabQWidget, title)
-
         canvas = FigureCanvasQTAgg()
-        layout.addWidget(canvas)
-        layout.addWidget(NavigationToolbar2QT(canvas, self))
+        plot_layout.addWidget(canvas)
+        plot_layout.addWidget(NavigationToolbar2QT(canvas, tabQWidget))
 
-        pt = PlotTab(title, update, canvas)
+        pt = PlotTab(title, update, canvas, FilterState(), filter_view)
         self._plots.append(pt)
-        pt.update(canvas.figure, self._world_data, self._component, self._filters)
+        self._tabs_by_filter_view[filter_view] = pt
+        for plot in self._plots:
+            plot.filter_view.filter_applied_globally.connect(
+                filter_view.apply_nonlocal_filter
+            )
+            filter_view.filter_applied_globally.connect(
+                plot.filter_view.apply_nonlocal_filter
+            )
+        pt.update(canvas.figure, self._world_data, self._component, pt.filters)
         if activate:
             self._tab_widget.setCurrentWidget(tabQWidget)
 
@@ -84,7 +99,15 @@ class PlotViewer(QGroupBox):
     def close_tab(self, index: int):
         # TODO check last tab
         self._tab_widget.removeTab(index)
-        self._plots.pop(index)
+        pt = self._plots.pop(index)
+        for plot in self._plots:
+            plot.filter_view.filter_applied_globally.disconnect(
+                pt.filter_view.apply_nonlocal_filter
+            )
+            pt.filter_view.filter_applied_globally.disconnect(
+                plot.filter_view.apply_nonlocal_filter
+            )
+        self._tabs_by_filter_view.pop(pt.filter_view)
 
     @Slot()
     def add_rank_plot(self, rank: int, metric: RankPlotMetric, type: RankPlotType):
@@ -124,11 +147,26 @@ class PlotViewer(QGroupBox):
         for plot_tab in self._plots:
             plot_tab.canvas.figure.clear()
             plot_tab.update(
-                plot_tab.canvas.figure, self._world_data, self._component, self._filters
+                plot_tab.canvas.figure,
+                self._world_data,
+                self._component,
+                plot_tab.filters,
             )
             plot_tab.canvas.draw_idle()
 
     @Slot(object)
-    def filters_changed(self, filters: GlobalFilters):
-        self._filters = filters
-        self._update_plots()
+    def filters_changed(self, filters: FilterState):
+        # This is shitty code, instead every tab should be its own component
+        sender = self.sender()
+        if type(sender) is not FilterView:
+            raise TypeError("Unexpected sender type.")
+        plot_tab = self._tabs_by_filter_view[sender]
+        plot_tab.filters = filters
+        plot_tab.canvas.figure.clear()
+        plot_tab.update(
+            plot_tab.canvas.figure,
+            self._world_data,
+            self._component,
+            plot_tab.filters,
+        )
+        plot_tab.canvas.draw_idle()
