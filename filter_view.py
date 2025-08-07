@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QGridLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -382,34 +381,6 @@ class TagFilterObject(FilterObjectBase):
         self._radio_group.button(checked_id).setChecked(True)
         self._include_filter.copy_values(other._include_filter)
         self._exclude_filter.copy_values(other._exclude_filter)
-
-
-class CheckFilterDialog(QDialog):
-    def __init__(self, options: list[str], parent: QWidget | None = None):
-        super().__init__(parent)
-        layout = QGridLayout(self)
-        for i, opt in enumerate(options):
-            cb = QCheckBox()
-            layout.addWidget(cb, i, 0)
-            layout.addWidget(QLabel(opt), i, 1)
-
-
-class CheckFilterWidget(QWidget):
-    _dialog: CheckFilterDialog
-    _label: QLabel
-    _edit_button: QPushButton
-
-    def __init__(self, options: list[str], parent: QWidget | None = None):
-        super().__init__(parent)
-        layout = QHBoxLayout(self)
-        self._label = QLabel()
-        self._edit_button = QPushButton()
-        self._dialog = CheckFilterDialog(options)
-        layout.addWidget(self._label)
-
-    @Slot()
-    def open_dialog(self):
-        self._dialog.open()
 
 
 class SizeFilterObject(RangeFilterObject):
