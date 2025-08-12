@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from serde import deserialize, field, from_dict
@@ -45,12 +46,16 @@ class RankPeer:
     components: list[str] = field(deserializer=lambda x: x.split(","))  # TODO remove
 
 
+def cast_dict_keys_to_int(x: dict[str, Any]):
+    return {int(k): from_dict(RankPeer, v) for k, v in x.items()}
+
+
 @deserialize
 class RankFile:
     general: RankGeneric
     peers: dict[int, RankPeer] = field(
         rename="peer",
-        deserializer=lambda x: {int(k): from_dict(RankPeer, v) for k, v in x.items()},
+        deserializer=cast_dict_keys_to_int,
     )
 
 
