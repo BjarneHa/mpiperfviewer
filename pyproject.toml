@@ -16,3 +16,5 @@ dependencies = [
 [tool.pyright]
 venv = ".venv"
 venvPath = "."
+reportUnknownMemberType = false
+reportAny = false

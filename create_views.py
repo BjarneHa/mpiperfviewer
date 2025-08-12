@@ -59,8 +59,8 @@ class CreateRankView(QGroupBox):
         layout.addWidget(self._type_box, 2, 1)
         create_button = QPushButton("Create")
         layout.addWidget(create_button, 3, 0, 1, 2)
-        create_button.clicked.connect(self.on_create)
-        self._metric_box.currentTextChanged.connect(self.on_select_metric)
+        _ = create_button.clicked.connect(self.on_create)
+        _ = self._metric_box.currentTextChanged.connect(self.on_select_metric)
 
     @Slot()
     def on_create(self):
@@ -105,7 +105,7 @@ class CreateMatrixView(QGroupBox):
         self._group_by_box.hide()  # TODO remove
         create_button = QPushButton("Create")
         layout.addWidget(create_button, 2, 0, 1, 2)
-        create_button.clicked.connect(self.on_create)
+        _ = create_button.clicked.connect(self.on_create)
 
     @Slot()
     def on_create(self):

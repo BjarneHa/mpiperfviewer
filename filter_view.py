@@ -30,7 +30,7 @@ class Filter(ABC):
 
 class Unfiltered(Filter):
     @override
-    def apply(self, data: NDArray[Any]) -> NDArray[Any]:
+    def apply[T](self, data: NDArray[Any]) -> NDArray[Any]:
         return np.ones_like(data, dtype=np.dtype(np.bool))
 
 
@@ -190,7 +190,7 @@ class CollectivesDialog(QDialog):
             layout.addWidget(cb)
         button = QPushButton(self)
         button.setText("Close")
-        button.pressed.connect(self.close_pressed)
+        _ = button.pressed.connect(self.close_pressed)
         layout.addWidget(button)
 
     def state(self):
@@ -258,7 +258,7 @@ class DiscreteMultiRangeFilterWidget(QWidget):
 
         self._button = QPushButton()
         self._button.setText("Edit")
-        self._button.pressed.connect(self.edit_pressed)
+        _ = self._button.pressed.connect(self.edit_pressed)
         layout.addWidget(self._button, 1, 1, 1, 1)
 
         self._collectives = CollectivesDialog()
@@ -435,8 +435,8 @@ class FilterView(QGroupBox):
         apply_everywhere = QPushButton("Apply Everywhere")
         self._layout.addWidget(apply, r, 0, 1, 5)
         self._layout.addWidget(apply_everywhere, r + 1, 0, 1, 5)
-        apply.clicked.connect(self._apply_filters)
-        apply_everywhere.clicked.connect(self._apply_filter_everywhere)
+        _ = apply.clicked.connect(self._apply_filters)
+        _ = apply_everywhere.clicked.connect(self._apply_filter_everywhere)
         self._apply_buttons[apply] = object
         self._apply_everywhere_buttons[apply_everywhere] = object
 

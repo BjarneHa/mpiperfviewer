@@ -62,19 +62,19 @@ def plot_matrix(
 
     img = ax.imshow(matrix, cmap, norm="log")
     # TODO labels do not work correctly
-    ax.set_xticks(ticks, labels=[str(r) for r in ranks], minor=True)
-    ax.set_yticks(ticks, labels=[str(r) for r in ranks], minor=True)
+    _ = ax.set_xticks(ticks, labels=[str(r) for r in ranks], minor=True)
+    _ = ax.set_yticks(ticks, labels=[str(r) for r in ranks], minor=True)
 
     cbar = fig.colorbar(img)
-    cbar.ax.set_ylabel(legend_title, rotation=-90, va="bottom")
+    _ = cbar.ax.set_ylabel(legend_title, rotation=-90, va="bottom")
     seperators = seperators or []
     for sep in seperators:
-        ax.axvline(x=sep + 0.5, color="black")
-        ax.axhline(y=sep + 0.5, color="black")
+        _ = ax.axvline(x=sep + 0.5, color="black")
+        _ = ax.axhline(y=sep + 0.5, color="black")
 
-    ax.set_xlabel("Receiver")
-    ax.set_ylabel("Sender")
-    ax.set_title(title)
+    _ = ax.set_xlabel("Receiver")
+    _ = ax.set_ylabel("Sender")
+    _ = ax.set_title(title)
 
 
 def generate_3d_data(

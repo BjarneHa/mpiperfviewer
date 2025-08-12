@@ -2,7 +2,10 @@ from dataclasses import dataclass
 from typing import Callable
 
 from matplotlib.backend_bases import FigureCanvasBase
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import (
+    FigureCanvasQTAgg,
+    NavigationToolbar2QT,  # pyright: ignore[reportPrivateImportUsage]
+)
 from matplotlib.figure import Figure
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
@@ -60,7 +63,7 @@ class PlotViewer(QGroupBox):
         self._tab_widget = QTabWidget(self, tabsClosable=True)
         layout.addWidget(self._tab_widget)
         self._initialize_tabs()
-        self._tab_widget.tabCloseRequested.connect(self.close_tab)
+        _ = self._tab_widget.tabCloseRequested.connect(self.close_tab)
 
     def _initialize_tabs(self):
         self.add_tab("total size", plot_size_matrix)
@@ -71,7 +74,7 @@ class PlotViewer(QGroupBox):
         layout = QHBoxLayout(tabQWidget)
         plot_box = QGroupBox("Plot", tabQWidget)
         filter_view = FilterView(tabQWidget)
-        filter_view.filters_changed.connect(self.filters_changed)
+        _ = filter_view.filters_changed.connect(self.filters_changed)
         layout.addWidget(plot_box, stretch=1)
         layout.addWidget(filter_view, stretch=0)
         plot_layout = QVBoxLayout(plot_box)
@@ -85,10 +88,10 @@ class PlotViewer(QGroupBox):
         self._plots.append(pt)
         self._tabs_by_filter_view[filter_view] = pt
         for plot in self._plots:
-            plot.filter_view.filter_applied_globally.connect(
+            _ = plot.filter_view.filter_applied_globally.connect(
                 filter_view.apply_nonlocal_filter
             )
-            filter_view.filter_applied_globally.connect(
+            _ = filter_view.filter_applied_globally.connect(
                 plot.filter_view.apply_nonlocal_filter
             )
         pt.update(canvas.figure, self._world_data, self._component, pt.filters)
@@ -97,17 +100,16 @@ class PlotViewer(QGroupBox):
 
     @Slot()
     def close_tab(self, index: int):
-        # TODO check last tab
         self._tab_widget.removeTab(index)
         pt = self._plots.pop(index)
         for plot in self._plots:
-            plot.filter_view.filter_applied_globally.disconnect(
+            _ = plot.filter_view.filter_applied_globally.disconnect(
                 pt.filter_view.apply_nonlocal_filter
             )
-            pt.filter_view.filter_applied_globally.disconnect(
+            _ = pt.filter_view.filter_applied_globally.disconnect(
                 plot.filter_view.apply_nonlocal_filter
             )
-        self._tabs_by_filter_view.pop(pt.filter_view)
+        _ = self._tabs_by_filter_view.pop(pt.filter_view)
 
     @Slot()
     def add_rank_plot(self, rank: int, metric: RankPlotMetric, type: RankPlotType):
@@ -127,7 +129,6 @@ class PlotViewer(QGroupBox):
                         plotfn = plot_sizes_3d
             case RankPlotMetric.MESSAGE_COUNT:
                 plotfn = plot_counts_2d
-        # plotfn = plot_tags_3d  # TODO remove
         self.add_tab(
             tab_title,
             lambda fig, wd, comp, filters: plotfn(fig, rank, wd, comp, filters),

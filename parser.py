@@ -28,19 +28,21 @@ def deserialize_sent_sizes(
     }
 
 
+def deserialize_sent_tags(
+    x: dict[str, list[tuple[int, int]]],
+) -> dict[str, dict[int, int]]:
+    return {comp: {tag: occ for tag, occ in v} for comp, v in x.items()}
+
+
 @deserialize
 class RankPeer:
     locality: str
     sent_count: dict[str, int]
-    sent_tags: dict[str, dict[int, int]] = field(
-        deserializer=lambda x: {
-            comp: {tag: occ for tag, occ in v} for comp, v in x.items()
-        }
-    )
+    sent_tags: dict[str, dict[int, int]] = field(deserializer=deserialize_sent_tags)
     sent_sizes: dict[str, dict[str, dict[int, int]]] = field(
         deserializer=deserialize_sent_sizes
     )
-    components: list[str] = field(deserializer=lambda x: x.split(","))
+    components: list[str] = field(deserializer=lambda x: x.split(","))  # TODO remove
 
 
 @deserialize
