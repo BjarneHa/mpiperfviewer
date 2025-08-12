@@ -408,7 +408,7 @@ class CountFilterObject(RangeFilterObject):
 
 
 class FilterView(QGroupBox):
-    filters_changed: Signal = Signal(object)
+    filters_changed: Signal = Signal()
     filter_applied_globally: Signal = Signal(object)
     _size_filter: SizeFilterObject
     _count_filter: CountFilterObject
@@ -417,6 +417,10 @@ class FilterView(QGroupBox):
     _apply_everywhere_buttons: dict[QPushButton, FilterObjectBase] = dict()
     _filter_state: FilterState = FilterState()
     _layout: QGridLayout
+
+    @property
+    def filter_state(self):
+        return self._filter_state
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__("Filter", parent)
@@ -456,7 +460,7 @@ class FilterView(QGroupBox):
 
     def _apply_filter_object(self, filter_object: FilterObjectBase):
         filter_object.update_filterstate(self._filter_state)
-        self.filters_changed.emit(self._filter_state)
+        self.filters_changed.emit()
 
     @Slot()
     def _apply_filters(self):

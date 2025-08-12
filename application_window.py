@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 from create_views import CreateMatrixView, CreateRankView
 from parser import WorldData
-from plot_view import PlotViewer
+from plotting.plot_view import PlotViewer
 from statistics_view import StatisticsView
 
 
