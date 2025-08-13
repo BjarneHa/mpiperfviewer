@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QVBoxLayout, QWidget
 
-from filter_view import Filter, FilterView
+from filter_view import Filter, FilterType, FilterView
 from parser import ComponentData, UInt64Array, WorldMeta
 
 
@@ -18,6 +18,9 @@ class PlotBase(QWidget):
     filter_view: FilterView
     world_meta: WorldMeta
     component_data: ComponentData
+
+    def filter_types(self) -> list[FilterType]:
+        return []
 
     @property
     def fig(self):
@@ -38,10 +41,12 @@ class PlotBase(QWidget):
         self.component_data = component_data
         layout = QHBoxLayout(self)
         plot_box = QGroupBox("Plot", self)
-        self.filter_view = FilterView(self)
+        self.filter_view = FilterView(self.filter_types(), self)
         _ = self.filter_view.filters_changed.connect(self.filters_changed)
         layout.addWidget(plot_box, stretch=1)
         layout.addWidget(self.filter_view, stretch=0)
+        if len(self.filter_types()) == 0:
+            self.filter_view.hide()
         plot_layout = QVBoxLayout(plot_box)
         self.canvas = FigureCanvasQTAgg()
         plot_layout.addWidget(self.canvas)
@@ -199,6 +204,10 @@ class ThreeDimPlotBase(PlotBase):
 
 class TagsBar3DPlot(ThreeDimPlotBase):
     @override
+    def filter_types(self) -> list[FilterType]:
+        return [FilterType.COUNT, FilterType.TAGS]
+
+    @override
     def init_plot(self):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         component_data = self.component_data
@@ -227,6 +236,10 @@ class TagsBar3DPlot(ThreeDimPlotBase):
 
 class SizeBar3DPlot(ThreeDimPlotBase):
     @override
+    def filter_types(self) -> list[FilterType]:
+        return [FilterType.COUNT, FilterType.SIZE]
+
+    @override
     def init_plot(self):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
@@ -254,6 +267,10 @@ class SizeBar3DPlot(ThreeDimPlotBase):
 
 class Counts2DBarPlot(PlotBase):
     _rank: int
+
+    @override
+    def filter_types(self) -> list[FilterType]:
+        return [FilterType.COUNT]
 
     def __init__(
         self,
@@ -284,6 +301,10 @@ class Counts2DBarPlot(PlotBase):
 
 class TagsPixelPlot(ThreeDimPlotBase):
     @override
+    def filter_types(self) -> list[FilterType]:
+        return [FilterType.COUNT, FilterType.TAGS]
+
+    @override
     def init_plot(self):
         ax = self.fig.add_subplot()
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
@@ -307,6 +328,10 @@ class TagsPixelPlot(ThreeDimPlotBase):
 
 
 class SizePixelPlot(ThreeDimPlotBase):
+    @override
+    def filter_types(self) -> list[FilterType]:
+        return [FilterType.COUNT, FilterType.SIZE]
+
     @override
     def init_plot(self):
         ax = self.fig.add_subplot()

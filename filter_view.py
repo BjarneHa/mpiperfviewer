@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import Any, override
 
 import numpy as np
@@ -407,12 +407,18 @@ class CountFilterObject(RangeFilterObject):
         fs.count = super().state()
 
 
+class FilterType(Enum):
+    TAGS = 0
+    SIZE = 1
+    COUNT = 2
+
+
 class FilterView(QGroupBox):
     filters_changed: Signal = Signal()
     filter_applied_globally: Signal = Signal(object)
-    _size_filter: SizeFilterObject
-    _count_filter: CountFilterObject
-    _tags_filter: TagFilterObject
+    _size_filter: SizeFilterObject | None
+    _count_filter: CountFilterObject | None
+    _tags_filter: TagFilterObject | None
     _apply_buttons: dict[QPushButton, FilterObjectBase] = dict()
     _apply_everywhere_buttons: dict[QPushButton, FilterObjectBase] = dict()
     _filter_state: FilterState = FilterState()
@@ -422,15 +428,22 @@ class FilterView(QGroupBox):
     def filter_state(self):
         return self._filter_state
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(
+        self,
+        filter_types: list[FilterType] | None = None,
+        parent: QWidget | None = None,
+    ):
         super().__init__("Filter", parent)
         self._layout = QGridLayout(self)
-        self._size_filter = SizeFilterObject(self._layout, self)
-        self._add_filter_object(self._size_filter)
-        self._count_filter = CountFilterObject(self._layout, self)
-        self._add_filter_object(self._count_filter)
-        self._tags_filter = TagFilterObject(self._layout, self)
-        self._add_filter_object(self._tags_filter)
+        if filter_types is None or FilterType.SIZE in filter_types:
+            self._size_filter = SizeFilterObject(self._layout, self)
+            self._add_filter_object(self._size_filter)
+        if filter_types is None or FilterType.COUNT in filter_types:
+            self._count_filter = CountFilterObject(self._layout, self)
+            self._add_filter_object(self._count_filter)
+        if filter_types is None or FilterType.TAGS in filter_types:
+            self._tags_filter = TagFilterObject(self._layout, self)
+            self._add_filter_object(self._tags_filter)
         self._layout.setRowStretch(self._layout.rowCount(), 1)
 
     def _add_filter_object(self, object: FilterObjectBase):
@@ -481,11 +494,14 @@ class FilterView(QGroupBox):
     def apply_nonlocal_filter(self, filter_object: FilterObjectBase):
         match filter_object:
             case TagFilterObject():
-                self._tags_filter.copy_values(filter_object)
+                if self._tags_filter is not None:
+                    self._tags_filter.copy_values(filter_object)
             case SizeFilterObject():
-                self._size_filter.copy_values(filter_object)
+                if self._size_filter is not None:
+                    self._size_filter.copy_values(filter_object)
             case CountFilterObject():
-                self._count_filter.copy_values(filter_object)
+                if self._count_filter is not None:
+                    self._count_filter.copy_values(filter_object)
             case FilterObjectBase():
                 raise Exception("Unreachable!")
         self._apply_filter_object(filter_object)

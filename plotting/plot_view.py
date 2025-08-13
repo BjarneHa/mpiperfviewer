@@ -122,7 +122,6 @@ class PlotViewer(QGroupBox):
                     activate=True,
                 )
 
-    # If filters is not None, only plots related to the filters will be redrawn
     def _update_plots(self):
         for plot in self._plots:
             plot.canvas.figure.clear()
