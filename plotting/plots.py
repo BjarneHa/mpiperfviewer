@@ -196,7 +196,6 @@ class ThreeDimPlotBase(PlotBase):
         legend_filter: Filter,
         count_filter: Filter,
     ):
-        component_data = self.component_data
         occurances = metrics_data[self._rank, :, :]
 
         # Apply range filter to tags
@@ -206,13 +205,17 @@ class ThreeDimPlotBase(PlotBase):
 
         occurances = occurances[:, metric_filter_array]
 
+        # `.sum(DIM, dtype=np.bool)` is equivalent to an OR-Operation and
+        # is used to filter out irrelevant rows and columns in the graph
+        filtered_occurances = count_filter.apply(occurances)
+
         # Only show procs that are actually communicated with
         # Applies count filter (after size/tags filter, perhaps this should be changable)
         procs = np.arange(0, self.world_meta.num_processes, dtype=np.uint64)
         procs_count_filter_array = (
             self.component_data.by_rank.count[self._rank, :] > 0
-        ) & (count_filter.apply(occurances.max(1)))
-        metric_count_filter_array = count_filter.apply(occurances.max(0))
+        ) & (filtered_occurances.sum(1, dtype=np.bool))
+        metric_count_filter_array = filtered_occurances.sum(0, dtype=np.bool)
         procs = procs[procs_count_filter_array]
         metric = metric[metric_count_filter_array]
         occurances = occurances[procs_count_filter_array, :][
