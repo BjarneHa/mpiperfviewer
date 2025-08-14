@@ -130,8 +130,8 @@ class RangeFilter(Filter):
 
     @override
     def apply(self, data: NDArray[Any]):
-        metric_min = self.min or np.iinfo(data.dtype).min
-        metric_max = self.max or np.iinfo(data.dtype).max
+        metric_min = np.iinfo(data.dtype).min if self.min is None else self.min
+        metric_max = np.iinfo(data.dtype).max if self.max is None else self.max
         filter = (metric_min <= data) & (data <= metric_max)
         return filter
 
