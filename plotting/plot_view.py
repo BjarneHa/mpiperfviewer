@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from create_views import MatrixMetric, RankPlotMetric, RankPlotType
+from create_views import MatrixGroupBy, MatrixMetric, RankPlotMetric, RankPlotType
 from parser import Component, WorldData
 from plotting.plots import (
     CountMatrixPlot,
@@ -52,10 +52,16 @@ class PlotViewer(QGroupBox):
 
     def _initialize_tabs(self):
         self.add_tab(
-            "total size", SizeMatrixPlot(self._world_data.meta, self.component_data)
+            "total size",
+            SizeMatrixPlot(
+                self._world_data.meta, self.component_data, MatrixGroupBy.RANK
+            ),
         )
         self.add_tab(
-            "message count", CountMatrixPlot(self._world_data.meta, self.component_data)
+            "message count",
+            CountMatrixPlot(
+                self._world_data.meta, self.component_data, MatrixGroupBy.RANK
+            ),
         )
 
     def add_tab(self, tab_title: str, plot: PlotBase, activate: bool = False):
@@ -107,18 +113,22 @@ class PlotViewer(QGroupBox):
         self.add_tab(tab_title, plot, activate=True)
 
     @Slot()
-    def add_matrix_plot(self, metric: MatrixMetric, group_by: str):
+    def add_matrix_plot(self, metric: MatrixMetric, group_by: MatrixGroupBy):
         match metric:
             case MatrixMetric.BYTES_SENT:
                 self.add_tab(
                     "total size",
-                    SizeMatrixPlot(self._world_data.meta, self.component_data),
+                    SizeMatrixPlot(
+                        self._world_data.meta, self.component_data, group_by
+                    ),
                     activate=True,
                 )
             case MatrixMetric.MESSAGES_SENT:
                 self.add_tab(
                     "message count",
-                    CountMatrixPlot(self._world_data.meta, self.component_data),
+                    CountMatrixPlot(
+                        self._world_data.meta, self.component_data, group_by
+                    ),
                     activate=True,
                 )
 

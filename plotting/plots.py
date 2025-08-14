@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QVBoxLayout, QWidget
 
+from create_views import MatrixGroupBy
 from filter_view import Filter, FilterType, FilterView
 from parser import ComponentData, UInt64Array, WorldMeta
 
@@ -66,17 +67,20 @@ class MatrixPlotBase(PlotBase):
     _plot_title: str
     _legend_label: str
     _cmap: str
+    _group_by: MatrixGroupBy
 
     def __init__(
         self,
         meta: WorldMeta,
         component_data: ComponentData,
+        group_by: MatrixGroupBy,
         plot_title: str,
         legend_label: str,
         cmap: str = "viridis",
         parent: QWidget | None = None,
     ):
         super().__init__(meta, component_data, parent)
+        self._group_by = group_by
         self._plot_title = plot_title
         self._legend_label = legend_label
         self._cmap = cmap
@@ -87,14 +91,14 @@ class MatrixPlotBase(PlotBase):
         separators: list[int] | None = None,
     ):
         separators = separators or []
-        ranks = list(range(self.world_meta.num_processes))
+        peers = list(range(self.group.count.shape[0]))
         ax = self.fig.add_subplot()
         ticks = np.arange(0, len(matrix))
 
         img = ax.imshow(matrix, self._cmap, norm="log")
         # TODO labels do not work correctly
-        _ = ax.set_xticks(ticks, labels=[str(r) for r in ranks], minor=True)
-        _ = ax.set_yticks(ticks, labels=[str(r) for r in ranks], minor=True)
+        _ = ax.set_xticks(ticks, labels=[str(r) for r in peers], minor=True)
+        _ = ax.set_yticks(ticks, labels=[str(r) for r in peers], minor=True)
 
         cbar = self.fig.colorbar(img)
         _ = cbar.ax.set_ylabel(self._legend_label, rotation=-90, va="bottom")
@@ -102,9 +106,24 @@ class MatrixPlotBase(PlotBase):
             _ = ax.axvline(x=sep + 0.5, color="black")
             _ = ax.axhline(y=sep + 0.5, color="black")
 
-        _ = ax.set_xlabel("Receiver")
-        _ = ax.set_ylabel("Sender")
+        _ = ax.set_xlabel(f"Receiver ({self._group_by})")
+        _ = ax.set_ylabel(f"Sender ({self._group_by})")
         _ = ax.set_title(self._plot_title)
+
+    @property
+    def group(self):
+        match self._group_by:
+            case MatrixGroupBy.RANK:
+                group = self.component_data.by_rank
+            case MatrixGroupBy.NUMA:
+                group = self.component_data.by_numa
+            case MatrixGroupBy.SOCKET:
+                group = self.component_data.by_socket
+            case MatrixGroupBy.NODE:
+                group = self.component_data.by_node
+        if group is None:
+            raise Exception(f"Cannot group by {self._group_by} due to missing data.")
+        return group
 
 
 class SizeMatrixPlot(MatrixPlotBase):
@@ -114,23 +133,25 @@ class SizeMatrixPlot(MatrixPlotBase):
         self,
         meta: WorldMeta,
         component_data: ComponentData,
+        group_by: MatrixGroupBy,
         plot_title: str = "Communication Matrix (message size)",
         legend_label: str = "messages sent",
         cmap: str = "Reds",
         parent: QWidget | None = None,
     ):
-        super().__init__(meta, component_data, plot_title, legend_label, cmap, parent)
+        super().__init__(
+            meta, component_data, group_by, plot_title, legend_label, cmap, parent
+        )
 
     @override
     def init_plot(self):
-        component_data = self.component_data
-        matrix_dims = component_data.rank_sizes.shape[:2]
+        matrix_dims = self.group.sizes.shape[:2]
         matrix = np.zeros(matrix_dims, dtype=np.uint64).view()
         for sender in range(matrix_dims[0]):
             for receiver in range(matrix_dims[1]):
-                for i, size in enumerate(component_data.occuring_sizes):
+                for i, size in enumerate(self.component_data.occuring_sizes):
                     matrix[sender, receiver] += (
-                        size * component_data.rank_sizes[sender, receiver, i]
+                        size * self.group.sizes[sender, receiver, i]
                     )
         self.plot_matrix(matrix)
 
@@ -140,16 +161,19 @@ class CountMatrixPlot(MatrixPlotBase):
         self,
         meta: WorldMeta,
         component_data: ComponentData,
+        group_by: MatrixGroupBy,
         plot_title: str = "Communication Matrix (message count)",
         legend_label: str = "messages sent",
         cmap: str = "Blues",
         parent: QWidget | None = None,
     ):
-        super().__init__(meta, component_data, plot_title, legend_label, cmap, parent)
+        super().__init__(
+            meta, component_data, group_by, plot_title, legend_label, cmap, parent
+        )
 
     @override
     def init_plot(self):
-        self.plot_matrix(self.component_data.rank_count)
+        self.plot_matrix(self.group.count)
 
 
 class ThreeDimPlotBase(PlotBase):
@@ -185,9 +209,9 @@ class ThreeDimPlotBase(PlotBase):
         # Only show procs that are actually communicated with
         # Applies count filter (after size/tags filter, perhaps this should be changable)
         procs = np.arange(0, self.world_meta.num_processes, dtype=np.uint64)
-        procs_count_filter_array = (component_data.rank_count[self._rank, :] > 0) & (
-            count_filter.apply(occurances.max(1))
-        )
+        procs_count_filter_array = (
+            self.component_data.by_rank.count[self._rank, :] > 0
+        ) & (count_filter.apply(occurances.max(1)))
         metric_count_filter_array = count_filter.apply(occurances.max(0))
         procs = procs[procs_count_filter_array]
         metric = metric[metric_count_filter_array]
@@ -213,7 +237,7 @@ class TagsBar3DPlot(ThreeDimPlotBase):
         component_data = self.component_data
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             component_data.occuring_tags,
-            component_data.rank_tags,
+            component_data.by_rank.tags,
             self.filters.tags,
             self.filters.count,
         )
@@ -244,7 +268,7 @@ class SizeBar3DPlot(ThreeDimPlotBase):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_sizes,
-            self.component_data.rank_sizes,
+            self.component_data.by_rank.sizes,
             self.filters.size,
             self.filters.count,
         )
@@ -286,7 +310,7 @@ class Counts2DBarPlot(PlotBase):
     def init_plot(self):
         ax = self.fig.add_subplot()
         x = np.arange(0, self.world_meta.num_processes)
-        y = self.component_data.rank_count[self._rank, :]
+        y = self.component_data.by_rank.count[self._rank, :]
         count_filter = self.filters.count.apply(y)
         x = x[count_filter]
         y = y[count_filter]
@@ -309,7 +333,7 @@ class TagsPixelPlot(ThreeDimPlotBase):
         ax = self.fig.add_subplot()
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_tags,
-            self.component_data.rank_tags,
+            self.component_data.by_rank.tags,
             self.filters.tags,
             self.filters.count,
         )
@@ -337,7 +361,7 @@ class SizePixelPlot(ThreeDimPlotBase):
         ax = self.fig.add_subplot()
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_sizes,
-            self.component_data.rank_sizes,
+            self.component_data.by_rank.sizes,
             self.filters.size,
             self.filters.count,
         )

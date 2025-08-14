@@ -77,13 +77,53 @@ def rankfile_name(i: int):
     return f"pc_data_{i}.toml"
 
 
+class GroupedMatrices:
+    # sizes[sender, receiver, size_index] = occurances
+    sizes: UInt64Array[tuple[int, int, int]]
+    # tags[sender, receiver, tag_index] = occurances
+    tags: UInt64Array[tuple[int, int, int]]
+    # count[sender, receiver] = occurances
+    count: UInt64Array[tuple[int, int]]
+
+    def __init__(
+        self,
+        sizes: UInt64Array[tuple[int, int, int]],
+        tags: UInt64Array[tuple[int, int, int]],
+        count: UInt64Array[tuple[int, int]],
+    ):
+        self.sizes = sizes
+        self.tags = tags
+        self.count = count
+
+    @classmethod
+    def create_empty(cls, n: int, num_tags: int, num_sizes: int):
+        sizes = np.zeros((n, n, num_sizes), dtype=np.uint64).view()
+        tags = np.zeros((n, n, num_tags), dtype=np.uint64).view()
+        count = np.zeros((n, n), dtype=np.uint64).view()
+        return cls(sizes, tags, count)
+
+    def regroup(self, group_size: int):
+        if group_size == 0:
+            return None
+
+        slice_size = self.sizes.shape[0] // group_size
+        new_sizes = self.sizes.reshape(
+            slice_size, group_size, slice_size, group_size, self.sizes.shape[2]
+        ).sum((1, 3))
+        new_tags = self.tags.reshape(
+            slice_size, group_size, slice_size, group_size, self.tags.shape[2]
+        ).sum((1, 3))
+        new_count = self.count.reshape(
+            slice_size, group_size, slice_size, group_size
+        ).sum((1, 3))
+        return GroupedMatrices(new_sizes, new_tags, new_count)
+
+
 class ComponentData:
-    # rank_sizes[sender, receiver, size_index] = occurances
-    rank_sizes: UInt64Array[tuple[int, int, int]]
-    # rank_tags[sender, receiver, tag_index] = occurances
-    rank_tags: UInt64Array[tuple[int, int, int]]
-    # rank_count[sender, receiver] = occurances
-    rank_count: UInt64Array[tuple[int, int]]
+    by_rank: GroupedMatrices
+    by_numa: GroupedMatrices | None = None
+    by_socket: GroupedMatrices | None = None
+    by_node: GroupedMatrices | None = None
     # occuring_sizes[size_index] = size
     occuring_sizes: UInt64Array[tuple[int]]
     # occuring_sizes[tag_index] = tag
@@ -100,11 +140,27 @@ class ComponentData:
         n = num_processes
         self.occuring_sizes = occuring_sizes
         self.occuring_tags = occuring_tags
-        self.rank_sizes = np.zeros((n, n, occuring_sizes.size), dtype=np.uint64).view()
-        self.rank_tags = np.zeros((n, n, occuring_tags.size), dtype=np.uint64).view()
-        self.rank_count = np.zeros((n, n), dtype=np.uint64).view()
+
+        self.by_rank = GroupedMatrices.create_empty(
+            n, occuring_tags.size, occuring_sizes.size
+        )
         self.total_bytes_sent = 0
         self.total_msgs_sent = 0
+
+    def group_by_numa(self, ranks_per_numa: int):
+        if self.by_rank.sizes.shape[0] % ranks_per_numa != 0:
+            raise Exception("Invalid NUMA grouping. Check data.")
+        self.by_numa = self.by_rank.regroup(ranks_per_numa)
+
+    def group_by_socket(self, ranks_per_socket: int):
+        if self.by_rank.sizes.shape[0] % ranks_per_socket != 0:
+            raise Exception("Invalid socket grouping. Check data.")
+        self.by_socket = self.by_rank.regroup(ranks_per_socket)
+
+    def group_by_node(self, ranks_per_node: int):
+        if self.by_rank.sizes.shape[0] % ranks_per_node != 0:
+            raise Exception("Invalid node grouping. Check data.")
+        self.by_node = self.by_rank.regroup(ranks_per_node)
 
 
 class WorldData:
@@ -177,13 +233,12 @@ class WorldData:
 
         for comp_n in self.meta.components:
             # Map from a given size/tag to its index in the relevant numpy array in self.rank_sizes/self.rank_tags respectively
+            comp = self.components[comp_n]
             tags_index_map = {
-                int(value): index
-                for index, value in enumerate(self.components[comp_n].occuring_tags)
+                int(value): index for index, value in enumerate(comp.occuring_tags)
             }
             sizes_index_map = {
-                int(value): index
-                for index, value in enumerate(self.components[comp_n].occuring_sizes)
+                int(value): index for index, value in enumerate(comp.occuring_sizes)
             }
 
             for sender in rank_files:
@@ -192,7 +247,6 @@ class WorldData:
                     raise ValueError(f"Invalid own_rank {from_rank}>=num_proc.")
 
                 for receiver, peer in sender.peers.items():
-                    comp = self.components[comp_n]
                     if receiver >= n:
                         raise ValueError(
                             f"Invalid peer {receiver}>=num_proc for rank {from_rank}."
@@ -201,10 +255,11 @@ class WorldData:
                         peer.sent_sizes.get("exact", {}).get(comp_n, {}).items()
                     ):
                         size_index = sizes_index_map[size]
-                        comp.rank_sizes[from_rank, receiver, size_index] = occurances
+                        comp.by_rank.sizes[from_rank, receiver, size_index] = occurances
                         comp.total_bytes_sent += size * occurances
                     for tags, occurances in peer.sent_tags.get(comp_n, {}).items():
                         tag_index = tags_index_map[tags]
-                        comp.rank_tags[from_rank, receiver, tag_index] = occurances
-                    comp.rank_count[from_rank, receiver] = peer.sent_count[comp_n]
+                        comp.by_rank.tags[from_rank, receiver, tag_index] = occurances
+                    comp.by_rank.count[from_rank, receiver] = peer.sent_count[comp_n]
                     comp.total_msgs_sent += peer.sent_count[comp_n]
+            comp.group_by_node(self.meta.num_processes // self.meta.num_nodes)
