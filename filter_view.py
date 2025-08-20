@@ -30,7 +30,7 @@ class Filter(ABC):
 
 class Unfiltered(Filter):
     @override
-    def apply[T](self, data: NDArray[Any]) -> NDArray[Any]:
+    def apply(self, data: NDArray[Any]) -> NDArray[Any]:
         return np.ones_like(data, dtype=np.dtype(np.bool))
 
 
