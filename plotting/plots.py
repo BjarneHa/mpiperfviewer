@@ -6,8 +6,8 @@ from matplotlib.backends.backend_qt import NavigationToolbar2QT
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
-from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtCore import Signal, Slot
+from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from create_views import MatrixGroupBy
 from filter_view import Filter, FilterType, FilterView
@@ -19,6 +19,8 @@ class PlotBase(QWidget):
     filter_view: FilterView
     world_meta: WorldMeta
     component_data: ComponentData
+    detach_requested: Signal = Signal()
+    _detach_button: QPushButton
 
     def filter_types(self) -> list[FilterType]:
         return []
@@ -51,7 +53,18 @@ class PlotBase(QWidget):
         plot_layout = QVBoxLayout(plot_box)
         self.canvas = FigureCanvasQTAgg()
         plot_layout.addWidget(self.canvas)
-        plot_layout.addWidget(NavigationToolbar2QT(self.canvas, self))
+        toolbar_layout = QHBoxLayout()
+        plot_layout.addLayout(toolbar_layout)
+        toolbar_layout.addWidget(NavigationToolbar2QT(self.canvas, self))
+        self._detach_button = QPushButton("Detach")
+        toolbar_layout.addWidget(self._detach_button)
+        _ = self._detach_button.clicked.connect(self._detach_clicked)
+
+    @Slot()
+    def _detach_clicked(self):
+        # Resending a different signal causes the sender of the signal to be changed
+        self.detach_requested.emit()
+        self._detach_button.hide()
 
     @Slot()
     def filters_changed(self):

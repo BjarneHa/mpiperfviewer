@@ -19,8 +19,6 @@ from plotting.plots import (
     TagsPixelPlot,
 )
 
-INITIAL_TABS = ["total size", "msg count"]
-
 
 class PlotViewer(QGroupBox):
     _world_data: WorldData
@@ -40,6 +38,7 @@ class PlotViewer(QGroupBox):
         self._tab_widget = QTabWidget(self, tabsClosable=True)
         layout.addWidget(self._tab_widget)
         self._initialize_tabs()
+        self._tab_widget.setMovable(True)
         _ = self._tab_widget.tabCloseRequested.connect(self.close_tab)
 
     @property
@@ -54,17 +53,24 @@ class PlotViewer(QGroupBox):
         self.add_tab(
             "total size",
             SizeMatrixPlot(
-                self._world_data.meta, self.component_data, MatrixGroupBy.RANK
+                self._world_data.meta,
+                self.component_data,
+                MatrixGroupBy.RANK,
+                parent=self,
             ),
         )
         self.add_tab(
             "message count",
             CountMatrixPlot(
-                self._world_data.meta, self.component_data, MatrixGroupBy.RANK
+                self._world_data.meta,
+                self.component_data,
+                MatrixGroupBy.RANK,
+                parent=self,
             ),
         )
 
     def add_tab(self, tab_title: str, plot: PlotBase, activate: bool = False):
+        _ = plot.detach_requested.connect(self.detach_tab)
         _ = self._tab_widget.insertTab(len(self._plots), plot, tab_title)
         self._plots.append(plot)
         for other_plot in self._plots:
@@ -77,6 +83,16 @@ class PlotViewer(QGroupBox):
         plot.init_plot()
         if activate:
             self._tab_widget.setCurrentWidget(plot)
+
+    @Slot()
+    def detach_tab(self):
+        sender = self.sender()
+        if not isinstance(sender, PlotBase):
+            raise Exception(f"Detach was called outside of a plot, from {sender}.")
+        index = self._tab_widget.indexOf(sender)
+        self._tab_widget.removeTab(index)
+        sender.setParent(None)
+        sender.showNormal()
 
     @Slot()
     def close_tab(self, index: int):
@@ -109,7 +125,7 @@ class PlotViewer(QGroupBox):
             case RankPlotMetric.MESSAGE_COUNT:
                 PlotType = Counts2DBarPlot
 
-        plot = PlotType(self._world_data.meta, self.component_data, rank)
+        plot = PlotType(self._world_data.meta, self.component_data, rank, parent=self)
         self.add_tab(tab_title, plot, activate=True)
 
     @Slot()
