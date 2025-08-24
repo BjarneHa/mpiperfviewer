@@ -4,6 +4,7 @@ from enum import Enum, IntEnum
 from typing import Any, override
 
 import numpy as np
+import qtawesome as qta
 from numpy.typing import NDArray
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 from PySide6.QtGui import QRegularExpressionValidator
@@ -449,7 +450,9 @@ class FilterView(QGroupBox):
     def _add_filter_object(self, object: FilterObjectBase):
         r = self._layout.rowCount()
         apply = QPushButton("Apply")
+        apply.setIcon(qta.icon("mdi6.check"))
         apply_everywhere = QPushButton("Apply Everywhere")
+        apply_everywhere.setIcon(qta.icon("mdi6.check-all"))
         self._layout.addWidget(apply, r, 0, 1, 5)
         self._layout.addWidget(apply_everywhere, r + 1, 0, 1, 5)
         _ = apply.clicked.connect(self._apply_filters)

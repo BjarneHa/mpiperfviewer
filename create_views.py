@@ -1,7 +1,8 @@
 from enum import StrEnum
 
+import qtawesome as qta
 from PySide6.QtCore import Signal, Slot
-from PySide6.QtGui import QIntValidator
+from PySide6.QtGui import QIcon, QIntValidator
 from PySide6.QtWidgets import (
     QComboBox,
     QGridLayout,
@@ -19,6 +20,19 @@ class MatrixMetric(StrEnum):
     BYTES_SENT = "bytes sent"
     MESSAGES_SENT = "messages sent"
 
+    @property
+    def color(self) -> str:
+        match self:
+            case self.BYTES_SENT:
+                return "red"
+            case self.MESSAGES_SENT:
+                return "blue"
+
+    def icon(self, color: str | None = None) -> QIcon:
+        return qta.icon(
+            "mdi6.data-matrix", color=self.color if color is None else color
+        )
+
 
 class MatrixGroupBy(StrEnum):
     RANK = "Rank"
@@ -32,10 +46,34 @@ class RankPlotMetric(StrEnum):
     MESSAGE_COUNT = "message count"
     TAGS = "tags"
 
+    @property
+    def color(self) -> str:
+        match self:
+            case self.SENT_SIZES:
+                return "orange"
+            case self.MESSAGE_COUNT:
+                return "cyan"
+            case self.TAGS:
+                return "green"
+
+    def icon(self, color: str | None = None) -> QIcon:
+        return qta.icon("mdi6.circle", color=self.color if color is None else color)
+
 
 class RankPlotType(StrEnum):
     PIXEL_PLOT = "Pixel Plot"
     BAR3D = "3D Bar"
+    BAR = "Bar Chart"
+
+    def icon(self, color: str | None = None) -> QIcon:
+        match self:
+            case self.PIXEL_PLOT:
+                name = "gradient-vertical"
+            case self.BAR3D:
+                name = "cube-outline"
+            case self.BAR:
+                name = "chart-bar"
+        return qta.icon(f"mdi6.{name}", color=color)
 
 
 class CreateRankView(QGroupBox):
@@ -57,17 +95,21 @@ class CreateRankView(QGroupBox):
         layout.addWidget(QLabel("Metric"), 1, 0)
         self._metric_box = QComboBox(self)
         for metric in RankPlotMetric:
-            self._metric_box.addItem(metric)
+            self._metric_box.addItem(metric.icon(), metric)
         layout.addWidget(self._metric_box, 1, 1)
         layout.addWidget(QLabel("Plot type"), 2, 0)
         self._type_box = QComboBox(self)
-        for metric in RankPlotType:
-            self._type_box.addItem(metric)
+        self._add_type(RankPlotType.PIXEL_PLOT)
+        self._add_type(RankPlotType.BAR3D)
         layout.addWidget(self._type_box, 2, 1)
         create_button = QPushButton("Create")
+        create_button.setIcon(qta.icon("mdi6.plus"))
         layout.addWidget(create_button, 3, 0, 1, 2)
         _ = create_button.clicked.connect(self.on_create)
         _ = self._metric_box.currentTextChanged.connect(self.on_select_metric)
+
+    def _add_type(self, metric: RankPlotType):
+        self._type_box.addItem(metric.icon(), metric)
 
     @Slot()
     def on_create(self):
@@ -82,11 +124,11 @@ class CreateRankView(QGroupBox):
     def on_select_metric(self, selected: str):
         if selected == RankPlotMetric.MESSAGE_COUNT:
             self._type_box.clear()
-            self._type_box.addItem("Bar Chart")
-        elif self._type_box.currentText() == "Bar Chart":
+            self._add_type(RankPlotType.BAR)
+        elif self._type_box.currentText() == RankPlotType.BAR:
             self._type_box.clear()
-            self._type_box.addItem(RankPlotType.PIXEL_PLOT)
-            self._type_box.addItem(RankPlotType.BAR3D)
+            self._add_type(RankPlotType.PIXEL_PLOT)
+            self._add_type(RankPlotType.BAR3D)
 
 
 class CreateMatrixView(QGroupBox):
@@ -100,7 +142,7 @@ class CreateMatrixView(QGroupBox):
         layout.addWidget(QLabel("Metric:"), 0, 0)
         self._metric_box = QComboBox(self)
         for m in MatrixMetric:
-            self._metric_box.addItem(m.value)
+            self._metric_box.addItem(m.icon(), m.value)
         layout.addWidget(self._metric_box, 0, 1)
         group_by_label = QLabel("Group by:")
         layout.addWidget(group_by_label, 1, 0)
@@ -109,6 +151,7 @@ class CreateMatrixView(QGroupBox):
             self._group_by_box.addItem(item)
         layout.addWidget(self._group_by_box, 1, 1)
         create_button = QPushButton("Create")
+        create_button.setIcon(qta.icon("mdi6.plus"))
         layout.addWidget(create_button, 2, 0, 1, 2)
         _ = create_button.clicked.connect(self.on_create)
 

@@ -1,6 +1,7 @@
 from typing import Any, cast, override
 
 import numpy as np
+import qtawesome as qta
 from matplotlib.backend_bases import FigureCanvasBase
 from matplotlib.backends.backend_qt import NavigationToolbar2QT
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -57,6 +58,7 @@ class PlotBase(QWidget):
         plot_layout.addLayout(toolbar_layout)
         toolbar_layout.addWidget(NavigationToolbar2QT(self.canvas, self))
         self._detach_button = QPushButton("Detach")
+        self._detach_button.setIcon(qta.icon("mdi6.open-in-new"))
         toolbar_layout.addWidget(self._detach_button)
         _ = self._detach_button.clicked.connect(self._detach_clicked)
 

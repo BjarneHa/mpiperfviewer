@@ -1,4 +1,5 @@
 from PySide6.QtCore import Slot
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QGroupBox,
     QTabWidget,
@@ -50,28 +51,21 @@ class PlotViewer(QGroupBox):
         return self._world_data.components[self._component]
 
     def _initialize_tabs(self):
-        self.add_tab(
-            "total size",
-            SizeMatrixPlot(
-                self._world_data.meta,
-                self.component_data,
-                MatrixGroupBy.RANK,
-                parent=self,
-            ),
-        )
-        self.add_tab(
-            "message count",
-            CountMatrixPlot(
-                self._world_data.meta,
-                self.component_data,
-                MatrixGroupBy.RANK,
-                parent=self,
-            ),
-        )
+        self.add_matrix_plot(MatrixMetric.MESSAGES_SENT, MatrixGroupBy.RANK)
+        self.add_matrix_plot(MatrixMetric.BYTES_SENT, MatrixGroupBy.RANK)
 
-    def add_tab(self, tab_title: str, plot: PlotBase, activate: bool = False):
+    def add_tab(
+        self,
+        tab_title: str,
+        plot: PlotBase,
+        icon: QIcon | None = None,
+        activate: bool = False,
+    ):
         _ = plot.detach_requested.connect(self.detach_tab)
-        _ = self._tab_widget.insertTab(len(self._plots), plot, tab_title)
+        if icon is None:
+            _ = self._tab_widget.addTab(plot, tab_title)
+        else:
+            _ = self._tab_widget.addTab(plot, icon, tab_title)
         self._plots.append(plot)
         for other_plot in self._plots:
             _ = plot.filter_view.filter_applied_globally.connect(
@@ -107,7 +101,9 @@ class PlotViewer(QGroupBox):
             )
 
     @Slot()
-    def add_rank_plot(self, rank: int, metric: RankPlotMetric, type: RankPlotType):
+    def add_rank_plot(self, rank: int, metric: str, type: str):
+        metric = RankPlotMetric(metric)
+        type = RankPlotType(type)
         tab_title = f"rank {rank} – {metric} ({type})"
         match metric:
             case RankPlotMetric.TAGS:
@@ -116,20 +112,26 @@ class PlotViewer(QGroupBox):
                         PlotType = TagsPixelPlot
                     case RankPlotType.BAR3D:
                         PlotType = TagsBar3DPlot
+                    case _:
+                        raise Exception("Unexpected option.")
             case RankPlotMetric.SENT_SIZES:
                 match type:
                     case RankPlotType.PIXEL_PLOT:
                         PlotType = SizePixelPlot
                     case RankPlotType.BAR3D:
                         PlotType = SizeBar3DPlot
+                    case _:
+                        raise Exception("Unexpected option.")
             case RankPlotMetric.MESSAGE_COUNT:
                 PlotType = Counts2DBarPlot
 
         plot = PlotType(self._world_data.meta, self.component_data, rank, parent=self)
-        self.add_tab(tab_title, plot, activate=True)
+        self.add_tab(tab_title, plot, type.icon(color=metric.color), activate=True)
 
     @Slot()
-    def add_matrix_plot(self, metric: MatrixMetric, group_by: MatrixGroupBy):
+    def add_matrix_plot(self, metric: str, group_by: str):
+        metric = MatrixMetric(metric)
+        group_by = MatrixGroupBy(group_by)
         match metric:
             case MatrixMetric.BYTES_SENT:
                 self.add_tab(
@@ -137,6 +139,7 @@ class PlotViewer(QGroupBox):
                     SizeMatrixPlot(
                         self._world_data.meta, self.component_data, group_by
                     ),
+                    metric.icon(),
                     activate=True,
                 )
             case MatrixMetric.MESSAGES_SENT:
@@ -145,6 +148,7 @@ class PlotViewer(QGroupBox):
                     CountMatrixPlot(
                         self._world_data.meta, self.component_data, group_by
                     ),
+                    metric.icon(),
                     activate=True,
                 )
 
