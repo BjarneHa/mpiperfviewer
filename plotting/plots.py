@@ -1,80 +1,30 @@
 from typing import Any, cast, override
 
 import numpy as np
-import qtawesome as qta
-from matplotlib.backend_bases import FigureCanvasBase
-from matplotlib.backends.backend_qt import NavigationToolbar2QT
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
-from PySide6.QtCore import Signal, Slot
-from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from create_views import MatrixGroupBy
-from filter_view import Filter, FilterType, FilterView
+from filter_view import Filter, FilterState, FilterType
 from parser import ComponentData, UInt64Array, WorldMeta
 
 
-class PlotBase(QWidget):
-    canvas: FigureCanvasBase
-    filter_view: FilterView
+class PlotBase:
+    fig: Figure
     world_meta: WorldMeta
     component_data: ComponentData
-    detach_requested: Signal = Signal()
-    _detach_button: QPushButton
 
     def filter_types(self) -> list[FilterType]:
         return []
 
-    @property
-    def fig(self):
-        return self.canvas.figure
-
-    @property
-    def filters(self):
-        return self.filter_view.filter_state
-
-    def __init__(
-        self,
-        meta: WorldMeta,
-        component_data: ComponentData,
-        parent: QWidget | None = None,
-    ):
-        super().__init__(parent)
+    def __init__(self, fig: Figure, meta: WorldMeta, component_data: ComponentData):
+        super().__init__()
+        self.fig = fig
         self.world_meta = meta
         self.component_data = component_data
-        layout = QHBoxLayout(self)
-        plot_box = QGroupBox("Plot", self)
-        self.filter_view = FilterView(self.filter_types(), self)
-        _ = self.filter_view.filters_changed.connect(self.filters_changed)
-        layout.addWidget(plot_box, stretch=1)
-        layout.addWidget(self.filter_view, stretch=0)
-        if len(self.filter_types()) == 0:
-            self.filter_view.hide()
-        plot_layout = QVBoxLayout(plot_box)
-        self.canvas = FigureCanvasQTAgg()
-        plot_layout.addWidget(self.canvas)
-        toolbar_layout = QHBoxLayout()
-        plot_layout.addLayout(toolbar_layout)
-        toolbar_layout.addWidget(NavigationToolbar2QT(self.canvas, self))
-        self._detach_button = QPushButton("Detach")
-        self._detach_button.setIcon(qta.icon("mdi6.open-in-new"))
-        toolbar_layout.addWidget(self._detach_button)
-        _ = self._detach_button.clicked.connect(self._detach_clicked)
 
-    @Slot()
-    def _detach_clicked(self):
-        # Resending a different signal causes the sender of the signal to be changed
-        self.detach_requested.emit()
-        self._detach_button.hide()
-
-    @Slot()
-    def filters_changed(self):
-        self.fig.clear()
-        self.init_plot()
-        self.canvas.draw_idle()
-
-    def init_plot(self):
+    def init_plot(self, filters: FilterState):
         pass
 
 
@@ -86,24 +36,22 @@ class MatrixPlotBase(PlotBase):
 
     def __init__(
         self,
+        fig: Figure,
         meta: WorldMeta,
         component_data: ComponentData,
         group_by: MatrixGroupBy,
         plot_title: str,
         legend_label: str,
         cmap: str = "viridis",
-        parent: QWidget | None = None,
     ):
-        super().__init__(meta, component_data, parent)
+        super().__init__(fig, meta, component_data)
         self._group_by = group_by
         self._plot_title = plot_title
         self._legend_label = legend_label
         self._cmap = cmap
 
     def plot_matrix(
-        self,
-        matrix: UInt64Array[tuple[int, int]],
-        separators: list[int] | None = None,
+        self, matrix: UInt64Array[tuple[int, int]], separators: list[int] | None = None
     ):
         separators = separators or []
         peers = list(range(self.group.count.shape[0]))
@@ -146,20 +94,20 @@ class SizeMatrixPlot(MatrixPlotBase):
 
     def __init__(
         self,
+        fig: Figure,
         meta: WorldMeta,
         component_data: ComponentData,
         group_by: MatrixGroupBy,
         plot_title: str = "Communication Matrix (message size)",
         legend_label: str = "messages sent",
         cmap: str = "Reds",
-        parent: QWidget | None = None,
     ):
         super().__init__(
-            meta, component_data, group_by, plot_title, legend_label, cmap, parent
+            fig, meta, component_data, group_by, plot_title, legend_label, cmap
         )
 
     @override
-    def init_plot(self):
+    def init_plot(self, filters: FilterState):
         matrix_dims = self.group.sizes.shape[:2]
         matrix = np.zeros(matrix_dims, dtype=np.uint64).view()
         for sender in range(matrix_dims[0]):
@@ -174,20 +122,20 @@ class SizeMatrixPlot(MatrixPlotBase):
 class CountMatrixPlot(MatrixPlotBase):
     def __init__(
         self,
+        fig: Figure,
         meta: WorldMeta,
         component_data: ComponentData,
         group_by: MatrixGroupBy,
         plot_title: str = "Communication Matrix (message count)",
         legend_label: str = "messages sent",
         cmap: str = "Blues",
-        parent: QWidget | None = None,
     ):
         super().__init__(
-            meta, component_data, group_by, plot_title, legend_label, cmap, parent
+            fig, meta, component_data, group_by, plot_title, legend_label, cmap
         )
 
     @override
-    def init_plot(self):
+    def init_plot(self, filters: FilterState):
         self.plot_matrix(self.group.count)
 
 
@@ -195,13 +143,9 @@ class ThreeDimPlotBase(PlotBase):
     _rank: int
 
     def __init__(
-        self,
-        meta: WorldMeta,
-        component_data: ComponentData,
-        rank: int,
-        parent: QWidget | None = None,
+        self, fig: Figure, meta: WorldMeta, component_data: ComponentData, rank: int
     ):
-        super().__init__(meta, component_data, parent)
+        super().__init__(fig, meta, component_data)
         self._rank = rank
 
     def generate_3d_data(
@@ -250,14 +194,14 @@ class TagsBar3DPlot(ThreeDimPlotBase):
         return [FilterType.COUNT, FilterType.TAGS]
 
     @override
-    def init_plot(self):
+    def init_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         component_data = self.component_data
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             component_data.occuring_tags,
             component_data.by_rank.tags,
-            self.filters.tags,
-            self.filters.count,
+            filters.tags,
+            filters.count,
         )
 
         _xx, _yy = np.meshgrid(xticks, yticks)
@@ -282,13 +226,13 @@ class SizeBar3DPlot(ThreeDimPlotBase):
         return [FilterType.COUNT, FilterType.SIZE]
 
     @override
-    def init_plot(self):
+    def init_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_sizes,
             self.component_data.by_rank.sizes,
-            self.filters.size,
-            self.filters.count,
+            filters.size,
+            filters.count,
         )
 
         _xx, _yy = np.meshgrid(xticks, yticks)
@@ -315,21 +259,17 @@ class Counts2DBarPlot(PlotBase):
         return [FilterType.COUNT]
 
     def __init__(
-        self,
-        meta: WorldMeta,
-        component_data: ComponentData,
-        rank: int,
-        parent: QWidget | None = None,
+        self, fig: Figure, meta: WorldMeta, component_data: ComponentData, rank: int
     ):
-        super().__init__(meta, component_data, parent)
+        super().__init__(fig, meta, component_data)
         self._rank = rank
 
     @override
-    def init_plot(self):
+    def init_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         x = np.arange(0, self.world_meta.num_processes)
         y = self.component_data.by_rank.count[self._rank, :]
-        count_filter = self.filters.count.apply(y)
+        count_filter = filters.count.apply(y)
         x = x[count_filter]
         y = y[count_filter]
         xticks = np.arange(0, len(x))
@@ -347,13 +287,13 @@ class TagsPixelPlot(ThreeDimPlotBase):
         return [FilterType.COUNT, FilterType.TAGS]
 
     @override
-    def init_plot(self):
+    def init_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_tags,
             self.component_data.by_rank.tags,
-            self.filters.tags,
-            self.filters.count,
+            filters.tags,
+            filters.count,
         )
 
         img = ax.imshow(tag_occurances, cmap="Greens", norm="log", aspect="auto")
@@ -375,13 +315,13 @@ class SizePixelPlot(ThreeDimPlotBase):
         return [FilterType.COUNT, FilterType.SIZE]
 
     @override
-    def init_plot(self):
+    def init_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_sizes,
             self.component_data.by_rank.sizes,
-            self.filters.size,
-            self.filters.count,
+            filters.size,
+            filters.count,
         )
 
         img = ax.imshow(size_occurances, cmap="Oranges", norm="log", aspect="auto")

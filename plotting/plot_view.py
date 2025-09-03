@@ -1,4 +1,10 @@
-from PySide6.QtCore import Slot
+from typing import Callable
+
+import qtawesome as qta
+from matplotlib.backends.backend_qt import NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+from PySide6.QtCore import Signal, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QGroupBox,
@@ -6,8 +12,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from qtpy.QtWidgets import QGroupBox, QHBoxLayout, QPushButton, QVBoxLayout
 
 from create_views import MatrixGroupBy, MatrixMetric, RankPlotMetric, RankPlotType
+from filter_view import FilterView
 from parser import Component, WorldData
 from plotting.plots import (
     CountMatrixPlot,
@@ -21,9 +29,57 @@ from plotting.plots import (
 )
 
 
+class PlotWidget(QWidget):
+    plot: PlotBase
+    filter_view: FilterView
+    detach_requested: Signal = Signal()
+    _detach_button: QPushButton
+
+    def __init__(
+        self,
+        plot_factory: Callable[[Figure], PlotBase],
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        plot_box = QGroupBox("Plot", self)
+        self.canvas = FigureCanvasQTAgg()
+        self.plot = plot_factory(self.canvas.figure)
+        self.filter_view = FilterView(self.plot.filter_types(), self)
+        _ = self.filter_view.filters_changed.connect(self.filters_changed)
+        layout.addWidget(plot_box, stretch=1)
+        layout.addWidget(self.filter_view, stretch=0)
+        if len(self.plot.filter_types()) == 0:
+            self.filter_view.hide()
+        plot_layout = QVBoxLayout(plot_box)
+        plot_layout.addWidget(self.canvas)
+        toolbar_layout = QHBoxLayout()
+        plot_layout.addLayout(toolbar_layout)
+        toolbar_layout.addWidget(NavigationToolbar2QT(self.canvas, self))
+        self._detach_button = QPushButton("Detach")
+        self._detach_button.setIcon(qta.icon("mdi6.open-in-new"))
+        toolbar_layout.addWidget(self._detach_button)
+        _ = self._detach_button.clicked.connect(self._detach_clicked)
+
+    @Slot()
+    def _detach_clicked(self):
+        # Resending a different signal causes the sender of the signal to be changed
+        self.detach_requested.emit()
+        self._detach_button.hide()
+
+    @Slot()
+    def filters_changed(self):
+        self.plot.fig.clear()
+        self.init_plot()
+        self.canvas.draw_idle()
+
+    def init_plot(self):
+        self.plot.init_plot(self.filter_view.filter_state)
+
+
 class PlotViewer(QGroupBox):
     _world_data: WorldData
-    _plots: list[PlotBase] = list()
+    _plots: list[PlotWidget] = list()
     _tab_widget: QTabWidget
     _component: Component
 
@@ -57,7 +113,7 @@ class PlotViewer(QGroupBox):
     def add_tab(
         self,
         tab_title: str,
-        plot: PlotBase,
+        plot: PlotWidget,
         icon: QIcon | None = None,
         activate: bool = False,
     ):
@@ -81,7 +137,7 @@ class PlotViewer(QGroupBox):
     @Slot()
     def detach_tab(self):
         sender = self.sender()
-        if not isinstance(sender, PlotBase):
+        if not isinstance(sender, PlotWidget):
             raise Exception(f"Detach was called outside of a plot, from {sender}.")
         index = self._tab_widget.indexOf(sender)
         self._tab_widget.removeTab(index)
@@ -125,8 +181,13 @@ class PlotViewer(QGroupBox):
             case RankPlotMetric.MESSAGE_COUNT:
                 PlotType = Counts2DBarPlot
 
-        plot = PlotType(self._world_data.meta, self.component_data, rank, parent=self)
-        self.add_tab(tab_title, plot, type.icon(color=metric.color), activate=True)
+        plot_widget = PlotWidget(
+            lambda f: PlotType(f, self._world_data.meta, self.component_data, rank),
+            parent=self,
+        )
+        self.add_tab(
+            tab_title, plot_widget, type.icon(color=metric.color), activate=True
+        )
 
     @Slot()
     def add_matrix_plot(self, metric: str, group_by: str):
@@ -134,23 +195,24 @@ class PlotViewer(QGroupBox):
         group_by = MatrixGroupBy(group_by)
         match metric:
             case MatrixMetric.BYTES_SENT:
-                self.add_tab(
-                    "total size",
-                    SizeMatrixPlot(
-                        self._world_data.meta, self.component_data, group_by
-                    ),
-                    metric.icon(),
-                    activate=True,
-                )
+                tab_title = "total size"
+                PlotType = SizeMatrixPlot
+
             case MatrixMetric.MESSAGES_SENT:
-                self.add_tab(
-                    "message count",
-                    CountMatrixPlot(
-                        self._world_data.meta, self.component_data, group_by
-                    ),
-                    metric.icon(),
-                    activate=True,
-                )
+                tab_title = "message count"
+                PlotType = CountMatrixPlot
+        widget = PlotWidget(
+            lambda fig: PlotType(
+                fig, self._world_data.meta, self.component_data, group_by
+            ),
+            parent=self,
+        )
+        self.add_tab(
+            tab_title,
+            widget,
+            metric.icon(),
+            activate=True,
+        )
 
     def _update_plots(self):
         for plot in self._plots:
