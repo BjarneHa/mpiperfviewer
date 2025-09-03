@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from qtpy.QtWidgets import QGroupBox, QHBoxLayout, QPushButton, QVBoxLayout
 
 from create_views import MatrixGroupBy, MatrixMetric, RankPlotMetric, RankPlotType
-from filter_view import FilterView
+from filtering.filter_widgets import FilterView
 from parser import Component, WorldData
 from plotting.plots import (
     CountMatrixPlot,

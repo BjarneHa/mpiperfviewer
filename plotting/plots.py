@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
 from create_views import MatrixGroupBy
-from filter_view import Filter, FilterState, FilterType
+from filtering.filters import Filter, FilterState, FilterType
 from parser import ComponentData, UInt64Array, WorldMeta
 
 
