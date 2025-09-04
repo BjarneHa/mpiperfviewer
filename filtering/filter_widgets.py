@@ -189,8 +189,8 @@ class DiscreteMultiRangeFilterWidget(QWidget):
 
         layout.addWidget(QLabel("Collectives:"), 1, 0, 1, 1)
 
-        self._button = QPushButton()
-        self._button.setText("Edit")
+        self._button = QPushButton("Edit", self)
+        self._button.setIcon(qta.icon("mdi6.pencil"))
         _ = self._button.pressed.connect(self.edit_pressed)
         layout.addWidget(self._button, 1, 1, 1, 1)
 
