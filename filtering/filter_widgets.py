@@ -1,6 +1,7 @@
 from enum import IntEnum
 from typing import override
 
+import numpy as np
 import qtawesome as qta
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 from PySide6.QtGui import QRegularExpressionValidator
@@ -21,7 +22,6 @@ from PySide6.QtWidgets import (
 from filtering.filters import (
     BadFilter,
     DiscreteMultiRangeFilter,
-    ExactFilter,
     Filter,
     FilterState,
     FilterType,
@@ -119,14 +119,17 @@ COLLECTIVES = [
 
 class CollectivesDialog(QDialog):
     changed: Signal = Signal(object)
-    _checkboxes: list[QCheckBox]
+    checked: Signal = Signal(int)
+    unchecked: Signal = Signal(int)
+    checkboxes: list[QCheckBox]
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        self._checkboxes = [QCheckBox(f"{s} ({n})") for n, s in COLLECTIVES]
-        for cb in self._checkboxes:
+        self.checkboxes = [QCheckBox(f"{s} ({n})") for n, s in COLLECTIVES]
+        for cb in self.checkboxes:
             layout.addWidget(cb)
+            _ = cb.checkStateChanged.connect(self._any_box_check_state_changed)
         button = QPushButton(self)
         button.setText("Close")
         _ = button.pressed.connect(self.close_pressed)
@@ -134,15 +137,35 @@ class CollectivesDialog(QDialog):
 
     def state(self):
         return [
-            tag for cb, (tag, _) in zip(self._checkboxes, COLLECTIVES) if cb.isChecked()
+            tag for cb, (tag, _) in zip(self.checkboxes, COLLECTIVES) if cb.isChecked()
         ]
+
+    def _get_checkbox_index(self, sender: QObject):
+        if not isinstance(sender, QCheckBox):
+            raise Exception(f'Unexpected sender {sender} for "checked" slot in {self}.')
+        try:
+            return self.checkboxes.index(sender)
+        except ValueError:
+            raise Exception(f'Non-child sender {sender} for "checked" slot in {self}.')
+
+    @Slot(Qt.CheckState)
+    def _any_box_check_state_changed(self, state: Qt.CheckState):
+        sender = self.sender()
+        i = self._get_checkbox_index(sender)
+        tag, _ = COLLECTIVES[i]
+        if not self.isVisible():
+            return
+        if state == Qt.CheckState.Unchecked:
+            self.unchecked.emit(tag)
+        else:
+            self.checked.emit(tag)
 
     @Slot()
     def close_pressed(self):
         self.hide()
 
     def copy_values(self, other: "CollectivesDialog"):
-        for self_cb, other_cb in zip(self._checkboxes, other._checkboxes):
+        for self_cb, other_cb in zip(self.checkboxes, other.checkboxes):
             self_cb.setCheckState(other_cb.checkState())
 
 
@@ -171,32 +194,58 @@ class DiscreteMultiRangeFilterWidget(QWidget):
         _ = self._button.pressed.connect(self.edit_pressed)
         layout.addWidget(self._button, 1, 1, 1, 1)
 
-        self._collectives = CollectivesDialog()
+        self._collectives = CollectivesDialog(self)
+        _ = self._collectives.checked.connect(self._collectives_checked)
+        _ = self._collectives.unchecked.connect(self._collectives_unchecked)
 
     @Slot()
     def edit_pressed(self):
-        self._collectives.show()
+        filter = DiscreteMultiRangeFilter(self._line_edit.text(), tolerant=True)
+        tags = np.array([tag for tag, _ in COLLECTIVES])
+        tag_included = filter.apply(tags)
+        for cb, included in zip(self._collectives.checkboxes, tag_included):
+            cb.setChecked(included)
+        self._collectives.open()
+
+    @Slot(int)
+    def _collectives_checked(self, tag: int):
+        text = self._line_edit.text()
+        if text == "":
+            self._line_edit.setText(str(tag))
+        else:
+            self._line_edit.setText(text + "," + str(tag))
+
+    @Slot(int)
+    def _collectives_unchecked(self, tag: int):
+        text = self._line_edit.text()
+        filter = DiscreteMultiRangeFilter(text, tolerant=True)
+        segments = text.split(",")
+        for exact in filter.exact:
+            if exact.segment is None:
+                raise Exception(
+                    "Unexpected Error: Filter should be associated with string segment."
+                )
+            if exact.n == tag:
+                segments[exact.segment] = ""
+
+        for range_ in filter.ranges:
+            if range_.segment is None:
+                raise Exception(
+                    "Unexpected Error: Filter should be associated with string segment."
+                )
+            segments[range_.segment] = range_.remove_exact(tag)
+        try:
+            while True:
+                empty_segment = segments.index("")
+                _ = segments.pop(empty_segment)
+        except ValueError:
+            pass
+        text = ",".join(segments)
+        self._line_edit.setText(text)
 
     def state(self) -> Filter:
-        filter = DiscreteMultiRangeFilter()
         try:
-            for tag in self._collectives.state():
-                filter.exact.append(ExactFilter(tag))
-
-            text = self._line_edit.text()
-            if len(text) == 0:
-                return filter
-
-            for el in text.split(","):
-                if "[" in el:
-                    if el[-1] != "]":
-                        raise ValueError("Range not closed.")
-                    min, max = el[1:-1].split(";")
-                    print(min, max)
-                    filter.ranges.append(RangeFilter(int(min), int(max)))
-                else:
-                    filter.exact.append(ExactFilter(int(el)))
-            return filter
+            return DiscreteMultiRangeFilter(self._line_edit.text())
         except ValueError as e:
             # TODO report error
             print(f"Bad filter. {e}")
