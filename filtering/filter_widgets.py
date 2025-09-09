@@ -94,7 +94,7 @@ class RangeFilterObject(FilterObjectBase):
         self._max_edit.setText(other._max_edit.text())
 
 
-DISCRETE_MULTIRANGE_REGEXP = r"[0-9,;\-\[\]]*"
+DISCRETE_MULTIRANGE_REGEXP = r"[inf0-9,;\+\-\[\]]*"
 
 COLLECTIVES = [
     (-10, "MPI_Allgather"),

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from itertools import chain
 from typing import Any, override
 
 import numpy as np
@@ -50,7 +51,7 @@ class RangeFilter(SerializedFilter):
 
     @override
     def __str__(self) -> str:
-        return "{" + f"min: {self.min}, max: {self.max}" + "}"
+        return f"[{self.min};{self.max}]"
 
     @override
     def __eq__(self, other: object, /) -> bool:
@@ -68,28 +69,33 @@ class RangeFilter(SerializedFilter):
         return filter
 
     def remove_exact(self, n: int) -> str:
-        if self.min is None or self.max is None:
-            raise Exception("Can not generate filter string for open ranges.")
-        if self.min == n and self.max == n:
-            return ""
-        if n < self.min or n > self.max:
-            return f"[{self.min};{self.max}]"
-        if self.max - self.min == 1:
-            if n == self.min:
-                return f"{self.max}"
-            if n == self.max:
-                return f"{self.min}"
-        if self.max - self.min == 2 and n == self.min + 1:
-            return f"{self.min},{self.max}"
-        if self.min == n:
-            return f"[{n + 1};{self.max}]"
-        if self.min + 1 == n:
-            return f"{self.min},[{n + 1};{self.max}]"
-        if self.max == n:
-            return f"[{self.min};{n - 1}]"
-        if self.max == n + 1:
-            return f"[{self.min};{n - 1}],{self.max}"
-        return f"[{self.min};{n - 1}],[{n + 1};{self.max}]"
+        min_str = "-inf" if self.min is None else str(self.min)
+        max_str = "+inf" if self.max is None else str(self.max)
+        if (self.min is not None and n < self.min) or (
+            self.max is not None and n > self.max
+        ):
+            return f"[{min_str};{max_str}]"
+        match self.min:
+            case min if min == n:
+                left = ""
+            case min if min == n - 1:
+                left = min_str
+            case _:
+                left = f"[{min_str}; {n - 1}]"
+
+        match self.max:
+            case max if max == n:
+                right = ""
+            case max if max == n + 1:
+                right = max_str
+            case _:
+                right = f"[{n + 1};{max_str}]"
+
+        if left == "":
+            return right
+        if right == "":
+            return left
+        return f"{left},{right}"
 
 
 class ExactFilter(SerializedFilter):
@@ -101,7 +107,7 @@ class ExactFilter(SerializedFilter):
 
     @override
     def __str__(self) -> str:
-        return "{" + f"n: {self.n}" + "}"
+        return str(self.n)
 
     @override
     def __eq__(self, other: object, /) -> bool:
@@ -128,7 +134,21 @@ class DiscreteMultiRangeFilter(Filter):
                     if not el.endswith("]"):
                         raise ValueError(f'Range not closed in "{el}".')
                     min, max = el[1:-1].split(";")
-                    self.ranges.append(RangeFilter(int(min), int(max), i))
+                    if min == "inf" or min == "+inf":
+                        raise ValueError(
+                            f'Range minimum may not be positive infinity: "{el}"'
+                        )
+                    if max == "-inf":
+                        raise ValueError(
+                            f'Range maximum may not be negative infinity: "{el}"'
+                        )
+
+                    range_filter = RangeFilter(
+                        int(min) if min != "-inf" else None,
+                        int(max) if max != "inf" and max != "+inf" else None,
+                        i,
+                    )
+                    self.ranges.append(range_filter)
                 else:
                     exact = int(el)
                     self.exact.append(ExactFilter(exact, i))
@@ -145,6 +165,10 @@ class DiscreteMultiRangeFilter(Filter):
         for exact in self.exact:
             filter |= exact.apply(data)
         return filter
+
+    @override
+    def __str__(self) -> str:
+        return ",".join([str(f) for f in chain(self.ranges, self.exact)])
 
 
 class InvertedFilter(Filter):
