@@ -8,11 +8,12 @@ from PySide6.QtCore import Signal, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QGroupBox,
+    QHBoxLayout,
+    QPushButton,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
-from qtpy.QtWidgets import QGroupBox, QHBoxLayout, QPushButton, QVBoxLayout
 
 from create_views import MatrixGroupBy, MatrixMetric, RankPlotMetric, RankPlotType
 from filtering.filter_widgets import FilterView
