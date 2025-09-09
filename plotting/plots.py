@@ -15,7 +15,8 @@ class PlotBase:
     world_meta: WorldMeta
     component_data: ComponentData
 
-    def filter_types(self) -> list[FilterType]:
+    @classmethod
+    def filter_types(cls) -> list[FilterType]:
         return []
 
     def __init__(self, fig: Figure, meta: WorldMeta, component_data: ComponentData):
@@ -190,7 +191,8 @@ class ThreeDimPlotBase(PlotBase):
 
 class TagsBar3DPlot(ThreeDimPlotBase):
     @override
-    def filter_types(self) -> list[FilterType]:
+    @classmethod
+    def filter_types(cls) -> list[FilterType]:
         return [FilterType.COUNT, FilterType.TAGS]
 
     @override
@@ -222,7 +224,8 @@ class TagsBar3DPlot(ThreeDimPlotBase):
 
 class SizeBar3DPlot(ThreeDimPlotBase):
     @override
-    def filter_types(self) -> list[FilterType]:
+    @classmethod
+    def filter_types(cls) -> list[FilterType]:
         return [FilterType.COUNT, FilterType.SIZE]
 
     @override
@@ -255,7 +258,8 @@ class Counts2DBarPlot(PlotBase):
     _rank: int
 
     @override
-    def filter_types(self) -> list[FilterType]:
+    @classmethod
+    def filter_types(cls) -> list[FilterType]:
         return [FilterType.COUNT]
 
     def __init__(
@@ -283,7 +287,8 @@ class Counts2DBarPlot(PlotBase):
 
 class TagsPixelPlot(ThreeDimPlotBase):
     @override
-    def filter_types(self) -> list[FilterType]:
+    @classmethod
+    def filter_types(cls) -> list[FilterType]:
         return [FilterType.COUNT, FilterType.TAGS]
 
     @override
@@ -311,7 +316,8 @@ class TagsPixelPlot(ThreeDimPlotBase):
 
 class SizePixelPlot(ThreeDimPlotBase):
     @override
-    def filter_types(self) -> list[FilterType]:
+    @classmethod
+    def filter_types(cls) -> list[FilterType]:
         return [FilterType.COUNT, FilterType.SIZE]
 
     @override
