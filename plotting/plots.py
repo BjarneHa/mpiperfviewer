@@ -16,6 +16,10 @@ class PlotBase:
     component_data: ComponentData
 
     @classmethod
+    def cli_name(cls) -> str:
+        raise Exception("Unimplemented")
+
+    @classmethod
     def filter_types(cls) -> list[FilterType]:
         return []
 
@@ -108,6 +112,11 @@ class SizeMatrixPlot(MatrixPlotBase):
         )
 
     @override
+    @classmethod
+    def cli_name(cls) -> str:
+        return "total_matrix"
+
+    @override
     def init_plot(self, filters: FilterState):
         matrix_dims = self.group.sizes.shape[:2]
         matrix = np.zeros(matrix_dims, dtype=np.uint64).view()
@@ -134,6 +143,11 @@ class CountMatrixPlot(MatrixPlotBase):
         super().__init__(
             fig, meta, component_data, group_by, plot_title, legend_label, cmap
         )
+
+    @override
+    @classmethod
+    def cli_name(cls) -> str:
+        return "msgs_matrix"
 
     @override
     def init_plot(self, filters: FilterState):
@@ -196,6 +210,11 @@ class TagsBar3DPlot(ThreeDimPlotBase):
         return [FilterType.COUNT, FilterType.TAGS]
 
     @override
+    @classmethod
+    def cli_name(cls) -> str:
+        return "tags_3d"
+
+    @override
     def init_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         component_data = self.component_data
@@ -227,6 +246,11 @@ class SizeBar3DPlot(ThreeDimPlotBase):
     @classmethod
     def filter_types(cls) -> list[FilterType]:
         return [FilterType.COUNT, FilterType.SIZE]
+
+    @override
+    @classmethod
+    def cli_name(cls) -> str:
+        return "size_3d"
 
     @override
     def init_plot(self, filters: FilterState):
@@ -262,6 +286,11 @@ class Counts2DBarPlot(PlotBase):
     def filter_types(cls) -> list[FilterType]:
         return [FilterType.COUNT]
 
+    @override
+    @classmethod
+    def cli_name(cls) -> str:
+        return "counts"
+
     def __init__(
         self, fig: Figure, meta: WorldMeta, component_data: ComponentData, rank: int
     ):
@@ -292,6 +321,11 @@ class TagsPixelPlot(ThreeDimPlotBase):
         return [FilterType.COUNT, FilterType.TAGS]
 
     @override
+    @classmethod
+    def cli_name(cls) -> str:
+        return "tags_px"
+
+    @override
     def init_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
@@ -319,6 +353,11 @@ class SizePixelPlot(ThreeDimPlotBase):
     @classmethod
     def filter_types(cls) -> list[FilterType]:
         return [FilterType.COUNT, FilterType.SIZE]
+
+    @override
+    @classmethod
+    def cli_name(cls) -> str:
+        return "size_px"
 
     @override
     def init_plot(self, filters: FilterState):

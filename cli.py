@@ -23,20 +23,24 @@ from plotting.plots import (
 )
 
 RANK_PLOTS = {
-    "size_3d": SizeBar3DPlot,
-    "size_px": SizePixelPlot,
-    "tags_3d": TagsBar3DPlot,
-    "tags_px": TagsPixelPlot,
-    "counts": Counts2DBarPlot,
+    p.cli_name(): p
+    for p in [
+        SizeBar3DPlot,
+        SizePixelPlot,
+        TagsBar3DPlot,
+        TagsPixelPlot,
+        Counts2DBarPlot,
+    ]
 }
-MATRIX_PLOTS = {"total_matrix": SizeMatrixPlot, "msgs_matrix": CountMatrixPlot}
+MATRIX_PLOTS = {
+    p.cli_name(): p
+    for p in [
+        SizeMatrixPlot,
+        CountMatrixPlot,
+    ]
+}
 
-GROUPINGS = {
-    "rank": MatrixGroupBy.RANK,
-    "numa": MatrixGroupBy.NUMA,
-    "socket": MatrixGroupBy.SOCKET,
-    "node": MatrixGroupBy.NODE,
-}
+GROUPINGS = [g.name.lower() for g in MatrixGroupBy]
 
 
 def create_parser():
@@ -84,7 +88,7 @@ def create_parser():
         help="Export the specified plot. You can specify the filename using the format PLOTTYPE=FILENAME."
         + f" The available plot types are {matrix_plots_list} and {rank_plots_list}."
         + ' For rank-specific plots, RANK needs to be specified. RANK may be "*" to create plot for all ranks.'
-        + f" For matrix plots, a grouping (one of {'/'.join(GROUPINGS.keys())}) needs to be specified.",
+        + f" For matrix plots, a grouping (one of {'/'.join(GROUPINGS)}) needs to be specified.",
         action="append",
     )
     _ = parser.add_argument(
@@ -198,10 +202,11 @@ def main():
             filename = plot + "." + parser_data.default_format
         matrix_class = MATRIX_PLOTS.get(plot)
         if matrix_class is not None:
-            grouping = GROUPINGS.get(param.lower())
-            if grouping is None:
+            try:
+                grouping = MatrixGroupBy[param.upper()]
+            except KeyError:
                 print(
-                    f'Grouping "{grouping}" is not one of {"/".join(GROUPINGS.keys())}. Exiting...',
+                    f'Grouping "{param}" is not one of {"/".join(GROUPINGS)}. Exiting...',
                     file=sys.stderr,
                 )
                 return
