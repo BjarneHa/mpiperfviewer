@@ -32,18 +32,24 @@ from plotting.plots import (
 
 
 class PlotWidget(QWidget):
+    title: str
+    icon: QIcon | None
     plot: PlotBase
     filter_view: FilterView
-    detach_requested: Signal = Signal()
-    _detach_button: QPushButton
+    reattach_or_detach_requested: Signal = Signal()
+    _reattach_or_detach_button: QPushButton
     _cmd_line_edit: QLineEdit
 
     def __init__(
         self,
+        title: str,
         plot_factory: Callable[[Figure], PlotBase],
+        icon: QIcon | None = None,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
+        self.title = title
+        self.icon = icon
         layout = QHBoxLayout(self)
         plot_box = QGroupBox("Plot", self)
         self.canvas = FigureCanvasQTAgg()
@@ -59,9 +65,10 @@ class PlotWidget(QWidget):
         toolbar_layout = QHBoxLayout()
         plot_layout.addLayout(toolbar_layout)
         toolbar_layout.addWidget(NavigationToolbar2QT(self.canvas, self))
-        self._detach_button = QPushButton("Detach")
-        self._detach_button.setIcon(qta.icon("mdi6.open-in-new"))
-        toolbar_layout.addWidget(self._detach_button)
+        self._reattach_or_detach_button = QPushButton("Detach")
+        self._reattach_or_detach_button.setIcon(qta.icon("mdi6.open-in-new"))
+        self._reattach_or_detach_button.clicked.connect(self._attach_detach_clicked)
+        toolbar_layout.addWidget(self._reattach_or_detach_button)
         cmd_layout = QHBoxLayout()
         self._cmd_line_edit = QLineEdit(self, readOnly=True)
         monospace_font = QFont("")
@@ -94,10 +101,15 @@ class PlotWidget(QWidget):
         clipboard.setText(self._cmd_line_edit.text())
 
     @Slot()
-    def _detach_clicked(self):
+    def _attach_detach_clicked(self):
         # Resending a different signal causes the sender of the signal to be changed
-        self.detach_requested.emit()
-        self._detach_button.hide()
+        self.reattach_or_detach_requested.emit()
+        if self._reattach_or_detach_button.text() == "Detach":
+            self._reattach_or_detach_button.setText("Attach")
+            self._reattach_or_detach_button.setIcon(qta.icon("mdi6.open-in-app"))
+        else:
+            self._reattach_or_detach_button.setText("Detach")
+            self._reattach_or_detach_button.setIcon(qta.icon("mdi6.open-in-new"))
 
     @Slot()
     def filters_changed(self):
@@ -143,18 +155,12 @@ class PlotViewer(QGroupBox):
         self.add_matrix_plot(MatrixMetric.MESSAGES_SENT, MatrixGroupBy.RANK)
         self.add_matrix_plot(MatrixMetric.BYTES_SENT, MatrixGroupBy.RANK)
 
-    def add_tab(
-        self,
-        tab_title: str,
-        plot: PlotWidget,
-        icon: QIcon | None = None,
-        activate: bool = False,
-    ):
-        _ = plot.detach_requested.connect(self.detach_tab)
-        if icon is None:
-            _ = self._tab_widget.addTab(plot, tab_title)
+    def add_tab(self, plot: PlotWidget, activate: bool = False):
+        _ = plot.reattach_or_detach_requested.connect(self.reattach_or_detach_tab)
+        if plot.icon is None:
+            _ = self._tab_widget.addTab(plot, plot.title)
         else:
-            _ = self._tab_widget.addTab(plot, icon, tab_title)
+            _ = self._tab_widget.addTab(plot, plot.icon, plot.title)
         self._plots.append(plot)
         for other_plot in self._plots:
             _ = plot.filter_view.filter_applied_globally.connect(
@@ -168,14 +174,20 @@ class PlotViewer(QGroupBox):
             self._tab_widget.setCurrentWidget(plot)
 
     @Slot()
-    def detach_tab(self):
+    def reattach_or_detach_tab(self):
         sender = self.sender()
         if not isinstance(sender, PlotWidget):
             raise Exception(f"Detach was called outside of a plot, from {sender}.")
-        index = self._tab_widget.indexOf(sender)
-        self._tab_widget.removeTab(index)
-        sender.setParent(None)
-        sender.showNormal()
+        if sender.parent() is not None:  # pyright: ignore[reportUnnecessaryComparison]
+            index = self._tab_widget.indexOf(sender)
+            self._tab_widget.removeTab(index)
+            sender.setParent(None)
+            sender.showNormal()
+        else:
+            if sender.icon is None:
+                _ = self._tab_widget.addTab(sender, sender.title)
+            else:
+                _ = self._tab_widget.addTab(sender, sender.icon, sender.title)
 
     @Slot()
     def close_tab(self, index: int):
@@ -214,13 +226,14 @@ class PlotViewer(QGroupBox):
             case RankPlotMetric.MESSAGE_COUNT:
                 PlotType = Counts2DBarPlot
 
+        icon = type.icon(color=metric.color)
         plot_widget = PlotWidget(
+            tab_title,
             lambda f: PlotType(f, self._world_data.meta, self.component_data, rank),
+            icon=icon,
             parent=self,
         )
-        self.add_tab(
-            tab_title, plot_widget, type.icon(color=metric.color), activate=True
-        )
+        self.add_tab(plot_widget, activate=True)
 
     @Slot()
     def add_matrix_plot(self, metric: str, group_by: str):
@@ -234,18 +247,16 @@ class PlotViewer(QGroupBox):
             case MatrixMetric.MESSAGES_SENT:
                 tab_title = "message count"
                 PlotType = CountMatrixPlot
+        icon = metric.icon()
         widget = PlotWidget(
+            tab_title,
             lambda fig: PlotType(
                 fig, self._world_data.meta, self.component_data, group_by
             ),
+            icon=icon,
             parent=self,
         )
-        self.add_tab(
-            tab_title,
-            widget,
-            metric.icon(),
-            activate=True,
-        )
+        self.add_tab(widget, activate=True)
 
     def _update_plots(self):
         for plot in self._plots:

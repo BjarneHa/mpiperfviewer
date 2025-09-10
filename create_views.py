@@ -160,8 +160,6 @@ class CreateMatrixView(QGroupBox):
 
     @Slot()
     def on_create(self):
-        metric = (
-            self._metric_box.currentText()
-        )  # TODO valueerror when empty => user feedback
+        metric = self._metric_box.currentText()
         group_by = self._group_by_box.currentText()
         self.create_tab.emit(metric, group_by)
