@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QWidget,
 )
@@ -113,9 +114,11 @@ class CreateRankView(QGroupBox):
 
     @Slot()
     def on_create(self):
-        rank = int(
-            self._rank_edit.text()
-        )  # TODO valueerror when empty => user feedback
+        try:
+            rank = int(self._rank_edit.text())
+        except Exception:
+            _ = QMessageBox.warning(self, "Error", "Please specify a rank.")
+            return
         metric = self._metric_box.currentText()
         type = self._type_box.currentText()
         self.create_tab.emit(rank, metric, type)

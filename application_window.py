@@ -1,10 +1,12 @@
 from pathlib import Path
+from tomllib import TOMLDecodeError
 from typing import final
 
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QInputDialog,
+    QMessageBox,
     QVBoxLayout,
     QWidget,
 )
@@ -17,12 +19,30 @@ from statistics_view import StatisticsView
 
 @final
 class ApplicationWindow(QWidget):
+    def _get_directory_from_dialog(self):
+        file = QFileDialog.getExistingDirectory(self)
+        if file == "":
+            exit(0)
+        return file
+
     def __init__(self, args: list[str]):
         super().__init__()
-        file = (
-            args[0] if len(args) > 0 else QFileDialog.getExistingDirectory(self)
-        )  # TODO FileNotFoundError, ESC
-        world_data = WorldData(Path(file))
+        if len(args) > 0:
+            file = args[0]
+        else:
+            file = self._get_directory_from_dialog()
+
+        while True:
+            try:
+                world_data = WorldData(Path(file))
+                break
+            except (FileNotFoundError, TOMLDecodeError) as e:
+                _ = QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"Directory did not contain valid MPI performance counter data: {e}.",
+                )
+                file = self._get_directory_from_dialog()
 
         component, ok = (
             (args[1], True)

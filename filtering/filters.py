@@ -135,24 +135,32 @@ class DiscreteMultiRangeFilter(Filter):
                 if el.startswith("["):
                     if not el.endswith("]"):
                         raise ValueError(f'Range not closed in "{el}".')
-                    min, max = el[1:-1].split(";")
-                    if min == "inf" or min == "+inf":
+                    try:
+                        min, max = el[1:-1].split(";")
+                    except ValueError:
+                        raise ValueError(f'"{el}" is not a valid range of form [x;y].')
+
+                    try:
+                        min = int(min) if min != "-inf" else None
+                    except ValueError:
                         raise ValueError(
-                            f'Range minimum may not be positive infinity: "{el}"'
-                        )
-                    if max == "-inf":
-                        raise ValueError(
-                            f'Range maximum may not be negative infinity: "{el}"'
+                            f'Minimum "{min}" of range "{el}" is not an integer or negative infinity.'
                         )
 
-                    range_filter = RangeFilter(
-                        int(min) if min != "-inf" else None,
-                        int(max) if max != "inf" and max != "+inf" else None,
-                        i,
-                    )
+                    try:
+                        max = int(max) if max != "inf" and max != "+inf" else None
+                    except ValueError:
+                        raise ValueError(
+                            f'Maximum "{max}" of range "{el}" is not an integer or positive infinity.'
+                        )
+
+                    range_filter = RangeFilter(min, max, i)
                     self.ranges.append(range_filter)
                 else:
-                    exact = int(el)
+                    try:
+                        exact = int(el)
+                    except ValueError:
+                        raise ValueError(f'"{el}" is not a finite integer.')
                     self.exact.append(ExactFilter(exact, i))
             except ValueError as e:
                 if tolerant:

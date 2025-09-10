@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QRadioButton,
     QVBoxLayout,
@@ -247,8 +248,7 @@ class DiscreteMultiRangeFilterWidget(QWidget):
         try:
             return DiscreteMultiRangeFilter(self._line_edit.text())
         except ValueError as e:
-            # TODO report error
-            print(f"Bad filter. {e}")
+            _ = QMessageBox.warning(self, "Error in Filter", str(e))
             return BadFilter()
 
     def set_disabled(self, disabled: bool):
