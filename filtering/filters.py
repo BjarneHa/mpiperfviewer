@@ -51,7 +51,9 @@ class RangeFilter(SerializedFilter):
 
     @override
     def __str__(self) -> str:
-        return f"[{self.min};{self.max}]"
+        min_str = "-inf" if self.min is None else str(self.min)
+        max_str = "+inf" if self.max is None else str(self.max)
+        return f"[{min_str};{max_str}]"
 
     @override
     def __eq__(self, other: object, /) -> bool:
@@ -187,3 +189,15 @@ class FilterState:
     size: Filter = field(default_factory=lambda: Unfiltered())
     count: Filter = field(default_factory=lambda: Unfiltered())
     tags: Filter = field(default_factory=lambda: Unfiltered())
+
+    def cli_format(self):
+        active_filters = list[str]()
+        self._format_single_filter(active_filters, "size", self.size)
+        self._format_single_filter(active_filters, "count", self.count)
+        self._format_single_filter(active_filters, "tags", self.tags)
+        return "=".join(active_filters)
+
+    def _format_single_filter(self, list: list[str], filter_name: str, filter: Filter):
+        if isinstance(filter, Unfiltered) or isinstance(filter, BadFilter):
+            return
+        list.append(f"{filter_name}:{filter}")

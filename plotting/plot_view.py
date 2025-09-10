@@ -5,10 +5,11 @@ from matplotlib.backends.backend_qt import NavigationToolbar2QT
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from PySide6.QtCore import Signal, Slot
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QFont, QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
+    QLineEdit,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
@@ -35,6 +36,7 @@ class PlotWidget(QWidget):
     filter_view: FilterView
     detach_requested: Signal = Signal()
     _detach_button: QPushButton
+    _cmd_line_edit: QLineEdit
 
     def __init__(
         self,
@@ -60,7 +62,36 @@ class PlotWidget(QWidget):
         self._detach_button = QPushButton("Detach")
         self._detach_button.setIcon(qta.icon("mdi6.open-in-new"))
         toolbar_layout.addWidget(self._detach_button)
-        _ = self._detach_button.clicked.connect(self._detach_clicked)
+        cmd_layout = QHBoxLayout()
+        self._cmd_line_edit = QLineEdit(self, readOnly=True)
+        monospace_font = QFont("")
+        monospace_font.setStyleHint(QFont.StyleHint.Monospace)
+        self._cmd_line_edit.setFont(monospace_font)
+        cmd_layout.addWidget(self._cmd_line_edit)
+        copy_button = QPushButton(self)
+        copy_button.setIcon(qta.icon("mdi6.content-copy"))
+        _ = copy_button.clicked.connect(self._copy_cmd)
+        cmd_layout.addWidget(copy_button)
+        plot_layout.addLayout(cmd_layout)
+        self._update_cmd()
+
+    def _update_cmd(self):
+        name = self.plot.cli_name()
+        cmd = f'mpiperfcli -p "{name}'
+        if self.plot.cli_param() != "":
+            cmd += "." + self.plot.cli_param()
+        cmd += '"'
+        cli_filters = self.filter_view.filter_state.cli_format()
+        if cli_filters != "":
+            cmd += f' -x "{name}={cli_filters}"'
+        cmd += f' "{self.plot.world_meta.source_directory.absolute()}"'
+        cmd += f' "{self.plot.component_data.name}"'
+        self._cmd_line_edit.setText(cmd)
+
+    @Slot()
+    def _copy_cmd(self):
+        clipboard = QGuiApplication.clipboard()
+        clipboard.setText(self._cmd_line_edit.text())
 
     @Slot()
     def _detach_clicked(self):
@@ -73,6 +104,7 @@ class PlotWidget(QWidget):
         self.plot.fig.clear()
         self.init_plot()
         self.canvas.draw_idle()
+        self._update_cmd()
 
     def init_plot(self):
         self.plot.init_plot(self.filter_view.filter_state)

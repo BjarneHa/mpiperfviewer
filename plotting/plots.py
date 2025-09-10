@@ -32,6 +32,9 @@ class PlotBase:
     def init_plot(self, filters: FilterState):
         pass
 
+    def cli_param(self) -> str:
+        raise Exception("Unimplemented")
+
 
 class MatrixPlotBase(PlotBase):
     _plot_title: str
@@ -54,6 +57,10 @@ class MatrixPlotBase(PlotBase):
         self._plot_title = plot_title
         self._legend_label = legend_label
         self._cmap = cmap
+
+    @override
+    def cli_param(self):
+        return self._group_by.name.lower()
 
     def plot_matrix(
         self, matrix: UInt64Array[tuple[int, int]], separators: list[int] | None = None
@@ -154,7 +161,7 @@ class CountMatrixPlot(MatrixPlotBase):
         self.plot_matrix(self.group.count)
 
 
-class ThreeDimPlotBase(PlotBase):
+class RankPlotBase(PlotBase):
     _rank: int
 
     def __init__(
@@ -163,6 +170,12 @@ class ThreeDimPlotBase(PlotBase):
         super().__init__(fig, meta, component_data)
         self._rank = rank
 
+    @override
+    def cli_param(self) -> str:
+        return str(self._rank)
+
+
+class ThreeDimPlotBase(RankPlotBase):
     def generate_3d_data(
         self,
         metrics_legend: NDArray[Any],
@@ -278,9 +291,7 @@ class SizeBar3DPlot(ThreeDimPlotBase):
         _ = ax.set_title(f"Messages with size to peer from Rank {self._rank}")
 
 
-class Counts2DBarPlot(PlotBase):
-    _rank: int
-
+class Counts2DBarPlot(RankPlotBase):
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -290,12 +301,6 @@ class Counts2DBarPlot(PlotBase):
     @classmethod
     def cli_name(cls) -> str:
         return "counts"
-
-    def __init__(
-        self, fig: Figure, meta: WorldMeta, component_data: ComponentData, rank: int
-    ):
-        super().__init__(fig, meta, component_data)
-        self._rank = rank
 
     @override
     def init_plot(self, filters: FilterState):

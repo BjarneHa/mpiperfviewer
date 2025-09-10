@@ -70,6 +70,7 @@ class WorldMeta:
     num_processes: int
     mpi_version: str
     version: tuple[int, int, int]
+    source_directory: Path
     components: frozenset[Component] = frozenset()
 
 
@@ -120,6 +121,7 @@ class GroupedMatrices:
 
 
 class ComponentData:
+    name: str
     by_rank: GroupedMatrices
     by_numa: GroupedMatrices | None = None
     by_socket: GroupedMatrices | None = None
@@ -133,10 +135,12 @@ class ComponentData:
 
     def __init__(
         self,
+        name: str,
         occuring_sizes: UInt64Array[tuple[int]],
         occuring_tags: Int64Array[tuple[int]],
         num_processes: int,
     ):
+        self.name = name
         n = num_processes
         self.occuring_sizes = occuring_sizes
         self.occuring_tags = occuring_tags
@@ -182,6 +186,7 @@ class WorldData:
                 mpi_version=rf0.general.mpi_version,
                 version=(0, 0, 0),
                 num_nodes=0,
+                source_directory=world_path,
             )
 
     def parse_ranks(self, world_path: Path):
@@ -228,7 +233,7 @@ class WorldData:
             cd_occuring_tags = (
                 np.array(sorted(occuring_tags[c]), dtype=np.int64).view().ravel()
             )
-            cd = ComponentData(cd_occuring_sizes, cd_occuring_tags, n)
+            cd = ComponentData(c, cd_occuring_sizes, cd_occuring_tags, n)
             self.components[c] = cd
 
         for comp_n in self.meta.components:
