@@ -11,10 +11,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from create_views import CreateMatrixView, CreateRankView
-from parser import WorldData
-from plotting.plot_view import PlotViewer
-from statistics_view import StatisticsView
+from mpiperfcli.parser import WorldData
+from mpiperfviewer.create_views import CreateMatrixView, CreateRankView
+from mpiperfviewer.plot_view import PlotViewer
+from mpiperfviewer.statistics_view import StatisticsView
 
 
 @final

@@ -16,12 +16,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from create_views import MatrixGroupBy, MatrixMetric, RankPlotMetric, RankPlotType
-from filtering.filter_widgets import FilterView
-from parser import Component, WorldData
-from plotting.plots import (
+from mpiperfcli.parser import Component, WorldData
+from mpiperfcli.plots import (
     CountMatrixPlot,
     Counts2DBarPlot,
+    MatrixGroupBy,
     PlotBase,
     SizeBar3DPlot,
     SizeMatrixPlot,
@@ -29,6 +28,12 @@ from plotting.plots import (
     TagsBar3DPlot,
     TagsPixelPlot,
 )
+from mpiperfviewer.create_views import (
+    MatrixMetric,
+    RankPlotMetric,
+    RankPlotType,
+)
+from mpiperfviewer.filter_widgets import FilterView
 
 
 class PlotWidget(QWidget):

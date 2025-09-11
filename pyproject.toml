@@ -3,6 +3,9 @@ name = "mpiperfviewer"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
+authors = [
+    { name = "Bjarne Hansen", email = "bjarne.hansen@tum.de" }
+]
 requires-python = ">=3.13"
 dependencies = [
     "matplotlib>=3.10.3",
@@ -10,12 +13,27 @@ dependencies = [
     "pyserde>=0.24.0",
     "pyside6>=6.9.0",
     "qtawesome>=1.4.0",
-    "tomli-w>=1.2.0",
-    "tomlkit>=0.13.2",
+    "mpiperfcli"
 ]
 
 [tool.pyright]
 venv = ".venv"
 venvPath = "."
 reportUnknownMemberType = false
+reportMissingTypeStubs = false
 reportAny = false
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.workspace]
+members = [
+    "mpiperfcli"
+]
+
+[tool.uv.sources]
+mpiperfcli = { workspace = true }
+
+[project.scripts]
+mpiperfviewer = "mpiperfviewer:main"

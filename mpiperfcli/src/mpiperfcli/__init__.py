@@ -8,12 +8,12 @@ from pathlib import Path
 
 from matplotlib.figure import Figure
 
-from create_views import MatrixGroupBy
-from filtering.filters import DiscreteMultiRangeFilter, FilterState, FilterType
-from parser import WorldData
-from plotting.plots import (
+from mpiperfcli.filters import DiscreteMultiRangeFilter, FilterState, FilterType
+from mpiperfcli.parser import WorldData
+from mpiperfcli.plots import (
     CountMatrixPlot,
     Counts2DBarPlot,
+    MatrixGroupBy,
     PlotBase,
     SizeBar3DPlot,
     SizeMatrixPlot,

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from filtering.filters import (
+from mpiperfcli.filters import (
     BadFilter,
     DiscreteMultiRangeFilter,
     Filter,

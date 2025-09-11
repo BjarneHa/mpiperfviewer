@@ -2,6 +2,12 @@ version = 1
 revision = 3
 requires-python = ">=3.13"
 
+[manifest]
+members = [
+    "mpiperfcli",
+    "mpiperfviewer",
+]
+
 [[package]]
 name = "beartype"
 version = "0.20.2"
@@ -206,17 +212,13 @@ wheels = [
 ]
 
 [[package]]
-name = "mpiperfviewer"
+name = "mpiperfcli"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "mpiperfcli" }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pyserde" },
-    { name = "pyside6" },
-    { name = "qtawesome" },
-    { name = "tomli-w" },
-    { name = "tomlkit" },
 ]
 
 [package.metadata]
@@ -224,10 +226,29 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "numpy", specifier = ">=2.2.5" },
     { name = "pyserde", specifier = ">=0.24.0" },
+]
+
+[[package]]
+name = "mpiperfviewer"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "mpiperfcli" },
+    { name = "numpy" },
+    { name = "pyserde" },
+    { name = "pyside6" },
+    { name = "qtawesome" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "matplotlib", specifier = ">=3.10.3" },
+    { name = "mpiperfcli", editable = "mpiperfcli" },
+    { name = "numpy", specifier = ">=2.2.5" },
+    { name = "pyserde", specifier = ">=0.24.0" },
     { name = "pyside6", specifier = ">=6.9.0" },
     { name = "qtawesome", specifier = ">=1.4.0" },
-    { name = "tomli-w", specifier = ">=1.2.0" },
-    { name = "tomlkit", specifier = ">=0.13.2" },
 ]
 
 [[package]]
@@ -471,24 +492,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
-]
-
-[[package]]
-name = "tomli-w"
-version = "1.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/19/75/241269d1da26b624c0d5e110e8149093c759b7a286138f4efd61a60e75fe/tomli_w-1.2.0.tar.gz", hash = "sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021", size = 7184, upload-time = "2025-01-15T12:07:24.262Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/18/c86eb8e0202e32dd3df50d43d7ff9854f8e0603945ff398974c1d91ac1ef/tomli_w-1.2.0-py3-none-any.whl", hash = "sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90", size = 6675, upload-time = "2025-01-15T12:07:22.074Z" },
-]
-
-[[package]]
-name = "tomlkit"
-version = "0.13.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b1/09/a439bec5888f00a54b8b9f05fa94d7f901d6735ef4e55dcec9bc37b5d8fa/tomlkit-0.13.2.tar.gz", hash = "sha256:fff5fe59a87295b278abd31bec92c15d9bc4a06885ab12bcea52c71119392e79", size = 192885, upload-time = "2024-08-14T08:19:41.488Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/b6/a447b5e4ec71e13871be01ba81f5dfc9d0af7e473da256ff46bc0e24026f/tomlkit-0.13.2-py3-none-any.whl", hash = "sha256:7a974427f6e119197f670fbbbeae7bef749a6c14e793db934baefc1b5f03efde", size = 37955, upload-time = "2024-08-14T08:19:40.05Z" },
 ]
 
 [[package]]

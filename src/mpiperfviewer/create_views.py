@@ -14,7 +14,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from parser import WorldData
+from mpiperfcli.parser import WorldData
+from mpiperfcli.plots import MatrixGroupBy
 
 
 class MatrixMetric(StrEnum):
@@ -33,13 +34,6 @@ class MatrixMetric(StrEnum):
         return qta.icon(
             "mdi6.data-matrix", color=self.color if color is None else color
         )
-
-
-class MatrixGroupBy(StrEnum):
-    RANK = "Rank"
-    NUMA = "NUMA Node"
-    SOCKET = "Socket"
-    NODE = "Node"
 
 
 class RankPlotMetric(StrEnum):
@@ -137,7 +131,7 @@ class CreateRankView(QGroupBox):
 class CreateMatrixView(QGroupBox):
     _metric_box: QComboBox
     _group_by_box: QComboBox
-    create_tab: Signal = Signal(str, str)
+    create_tab: Signal = Signal(str, int)
 
     def __init__(self, parent: QWidget):
         super().__init__("Create Global Communication Matrix", parent)

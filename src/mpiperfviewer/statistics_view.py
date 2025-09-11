@@ -3,7 +3,7 @@ from math import inf, isnan
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGridLayout, QGroupBox, QLabel, QWidget
 
-from parser import Component, WorldData
+from mpiperfcli.parser import Component, WorldData
 
 SI_PREFIXES = "kMGTPEZYRQ"
 

@@ -5,9 +5,10 @@ import sys
 from PySide6.QtCore import QCommandLineParser
 from PySide6.QtWidgets import QApplication
 
-from application_window import ApplicationWindow
+from mpiperfviewer.application_window import ApplicationWindow
 
-if __name__ == "__main__":
+
+def main():
     # Check whether there is already a running QApplication (e.g., if running
     # from an IDE).
     qapp = QApplication.instance()
@@ -27,3 +28,7 @@ if __name__ == "__main__":
     app.activateWindow()
     app.raise_()
     _ = qapp.exec()
+
+
+if __name__ == "__main__":
+    main()
