@@ -8,7 +8,12 @@ from pathlib import Path
 
 from matplotlib.figure import Figure
 
-from mpiperfcli.filters import DiscreteMultiRangeFilter, FilterState, FilterType
+from mpiperfcli.filters import (
+    DiscreteMultiRangeFilter,
+    FilterState,
+    FilterType,
+    RangeFilter,
+)
 from mpiperfcli.parser import WorldData
 from mpiperfcli.plots import (
     CountMatrixPlot,
@@ -118,7 +123,7 @@ def create_parser():
                 for name, plot_class in chain(MATRIX_PLOTS.items(), RANK_PLOTS.items())
             ]
         )
-        + '. A FILTER is specified with a name and a comma-separated list of ranges and exact values. E.g. "tags:[-20;10],4,[12;14]".',
+        + '. A FILTER is specified with a name and a comma-separated list of ranges and exact values. E.g. "tags:[-20;10],4,[12;14]". Note that for the count filter, only one range may be specified.',
         action="append",
     )
     return parser
@@ -159,6 +164,7 @@ def main():
                 f'Plot type "{plot_name}" does not exist. Exiting...', file=sys.stderr
             )
             return
+        filters[plot_class] = FilterState()
 
         for pf in plot_filters:
             filter_name, filter_text = pf.split(":", 1)
@@ -173,21 +179,28 @@ def main():
                 )
                 return
             try:
-                filter = DiscreteMultiRangeFilter(filter_text)
+                match filter_type:
+                    case FilterType.COUNT:
+                        range_filter = RangeFilter.from_str(filter_text)
+                        if range_filter is None:
+                            raise ValueError(
+                                f'Failed to parse "{filter_text}". A single range in the format [min;max] was expected.'
+                            )
+                        filters[plot_class].count = range_filter
+                    case FilterType.SIZE:
+                        filters[plot_class].size = DiscreteMultiRangeFilter.from_str(
+                            filter_text
+                        )
+                    case FilterType.TAGS:
+                        filters[plot_class].tags = DiscreteMultiRangeFilter.from_str(
+                            filter_text
+                        )
             except ValueError as e:
                 print(
                     f'Error parsing "{filter_name}" for plot type "{plot_name}": {e}. Exiting...',
                     file=sys.stderr,
                 )
                 return
-            filters[plot_class] = FilterState()
-            match filter_type:
-                case FilterType.COUNT:
-                    filters[plot_class].count = filter
-                case FilterType.SIZE:
-                    filters[plot_class].size = filter
-                case FilterType.TAGS:
-                    filters[plot_class].tags = filter
 
     plot_bases = list[tuple[str, PlotBase]]()
     for plot in parser_data.plot:

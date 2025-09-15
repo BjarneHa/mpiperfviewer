@@ -89,6 +89,10 @@ class RangeFilterObject(FilterObjectBase):
             pass
         return RangeFilter(min, max)
 
+    def from_state(self, state: RangeFilter):
+        self._min_edit.setText(str(state.min) if state.min is not None else "")
+        self._max_edit.setText(str(state.max) if state.max is not None else "")
+
     def copy_values(self, other: "RangeFilterObject"):
         self._checkbox.setCheckState(other._checkbox.checkState())
         self._min_edit.setText(other._min_edit.text())

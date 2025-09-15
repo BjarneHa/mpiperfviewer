@@ -2,11 +2,12 @@ from enum import StrEnum
 from typing import Any, cast, override
 
 import numpy as np
+from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
-from mpiperfcli.filters import Filter, FilterState, FilterType
+from mpiperfcli.filters import Filter, FilterState, FilterType, RangeFilter
 from mpiperfcli.parser import ComponentData, UInt64Array, WorldMeta
 
 
@@ -223,6 +224,14 @@ class ThreeDimPlotBase(RankPlotBase):
         return (occurances.T, xticks, yticks, procs, metric)
 
 
+class PixelPlotBase(ThreeDimPlotBase):
+    def _get_norm(self, filters: FilterState):
+        if isinstance(filters.count, RangeFilter):
+            return LogNorm(filters.count.min, filters.count.max)
+        else:
+            return LogNorm()
+
+
 class TagsBar3DPlot(ThreeDimPlotBase):
     @override
     @classmethod
@@ -326,7 +335,7 @@ class Counts2DBarPlot(RankPlotBase):
         _ = ax.set_title(f"Messages sent to peers by Rank {self._rank}")
 
 
-class TagsPixelPlot(ThreeDimPlotBase):
+class TagsPixelPlot(PixelPlotBase):
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -347,7 +356,9 @@ class TagsPixelPlot(ThreeDimPlotBase):
             filters.count,
         )
 
-        img = ax.imshow(tag_occurances, cmap="Greens", norm="log", aspect="auto")
+        img = ax.imshow(
+            tag_occurances, cmap="Greens", norm=self._get_norm(filters), aspect="auto"
+        )
 
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)
@@ -360,7 +371,7 @@ class TagsPixelPlot(ThreeDimPlotBase):
         _ = cbar.ax.set_ylabel("Message count", rotation=-90, va="bottom")
 
 
-class SizePixelPlot(ThreeDimPlotBase):
+class SizePixelPlot(PixelPlotBase):
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -381,7 +392,9 @@ class SizePixelPlot(ThreeDimPlotBase):
             filters.count,
         )
 
-        img = ax.imshow(size_occurances, cmap="Oranges", norm="log", aspect="auto")
+        img = ax.imshow(
+            size_occurances, cmap="Oranges", norm=self._get_norm(filters), aspect="auto"
+        )
 
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)

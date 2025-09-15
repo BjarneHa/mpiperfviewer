@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
@@ -70,6 +71,28 @@ class RangeFilter(SerializedFilter):
         filter = (metric_min <= data) & (data <= metric_max)
         return filter
 
+    @staticmethod
+    def from_str(s: str, segment: int | None = None):
+        range_match = re.match(r"^\[((?:\+|\-)?\-inf|\d+);((?:\+|\-)?inf|\d+)\]$", s)
+        if range_match is None:
+            return None
+        min, max = range_match.groups()
+
+        try:
+            min = int(min) if min != "-inf" else None
+        except ValueError:
+            raise ValueError(
+                f'Minimum "{min}" of range "{s}" is not an integer or negative infinity.'
+            )
+
+        try:
+            max = int(max) if max != "inf" and max != "+inf" else None
+        except ValueError:
+            raise ValueError(
+                f'Maximum "{max}" of range "{s}" is not an integer or positive infinity.'
+            )
+        return RangeFilter(min, max, segment)
+
     def remove_exact(self, n: int) -> str:
         min_str = "-inf" if self.min is None else str(self.min)
         max_str = "+inf" if self.max is None else str(self.max)
@@ -107,6 +130,13 @@ class ExactFilter(SerializedFilter):
         super().__init__(segment)
         self.n = n
 
+    @staticmethod
+    def from_str(s: str, segment: int | None = None):
+        try:
+            return ExactFilter(int(s), segment)
+        except ValueError:
+            raise ValueError(f'"{s}" is not a finite integer.')
+
     @override
     def __str__(self) -> str:
         return str(self.n)
@@ -123,49 +153,30 @@ class ExactFilter(SerializedFilter):
 class DiscreteMultiRangeFilter(Filter):
     ranges: list[RangeFilter]
     exact: list[ExactFilter]
+    text: str
 
     def __init__(self, text: str | None = None, tolerant: bool = False):
         self.ranges = list()
         self.exact = list()
+        self.text = text if text is not None else ""
         if text is None or len(text) == 0:
             return
 
         for i, el in enumerate(text.split(",")):
             try:
-                if el.startswith("["):
-                    if not el.endswith("]"):
-                        raise ValueError(f'Range not closed in "{el}".')
-                    try:
-                        min, max = el[1:-1].split(";")
-                    except ValueError:
-                        raise ValueError(f'"{el}" is not a valid range of form [x;y].')
-
-                    try:
-                        min = int(min) if min != "-inf" else None
-                    except ValueError:
-                        raise ValueError(
-                            f'Minimum "{min}" of range "{el}" is not an integer or negative infinity.'
-                        )
-
-                    try:
-                        max = int(max) if max != "inf" and max != "+inf" else None
-                    except ValueError:
-                        raise ValueError(
-                            f'Maximum "{max}" of range "{el}" is not an integer or positive infinity.'
-                        )
-
-                    range_filter = RangeFilter(min, max, i)
+                range_filter = RangeFilter.from_str(el)
+                if range_filter is not None:
                     self.ranges.append(range_filter)
                 else:
-                    try:
-                        exact = int(el)
-                    except ValueError:
-                        raise ValueError(f'"{el}" is not a finite integer.')
-                    self.exact.append(ExactFilter(exact, i))
+                    self.exact.append(ExactFilter.from_str(el, i))
             except ValueError as e:
                 if tolerant:
                     continue
                 raise e
+
+    @staticmethod
+    def from_str(s: str):
+        return DiscreteMultiRangeFilter(s)
 
     @override
     def apply(self, data: NDArray[Any]):
@@ -195,7 +206,7 @@ class InvertedFilter(Filter):
 @dataclass
 class FilterState:
     size: Filter = field(default_factory=lambda: Unfiltered())
-    count: Filter = field(default_factory=lambda: Unfiltered())
+    count: RangeFilter | Unfiltered = field(default_factory=lambda: Unfiltered())
     tags: Filter = field(default_factory=lambda: Unfiltered())
 
     def cli_format(self):
