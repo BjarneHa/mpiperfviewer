@@ -14,7 +14,7 @@ from mpiperfcli.filters import (
     FilterType,
     RangeFilter,
 )
-from mpiperfcli.parser import WorldData
+from mpiperfcli.parser import ComponentData, WorldData, WorldMeta
 from mpiperfcli.plots import (
     CountMatrixPlot,
     Counts2DBarPlot,
@@ -46,6 +46,38 @@ MATRIX_PLOTS = {
 }
 
 GROUPINGS = [g.name.lower() for g in MatrixGroupBy]
+
+
+def create_plot_from_plot_and_param(
+    plot: str,
+    param: str,
+    fig: Figure,
+    world_meta: WorldMeta,
+    component_data: ComponentData,
+):
+    matrix_class = MATRIX_PLOTS.get(plot)
+    if matrix_class is not None:
+        try:
+            grouping = MatrixGroupBy[param.upper()]
+        except KeyError:
+            raise Exception(
+                f'Grouping "{param}" is not one of {"/".join(GROUPINGS)}. Exiting...'
+            )
+
+        return matrix_class(fig, world_meta, component_data, grouping)
+    else:
+        rank_class = RANK_PLOTS.get(plot)
+        if rank_class is None:
+            raise Exception("Plot type does not exist. Exiting...")
+        try:
+            rank = int(param)
+            if rank < 0 or rank > world_meta.num_processes:
+                raise ValueError("Rank out-of-range.")
+            return rank_class(fig, world_meta, component_data, rank)
+        except ValueError:
+            raise Exception(
+                f"A valid rank needs to be specified for plot type {plot}. Exiting..."
+            )
 
 
 def create_parser():
@@ -212,65 +244,37 @@ def main():
             return
         plot, param, filename = match.groups()
         if filename is None:
-            filename = plot + "." + parser_data.default_format
-        matrix_class = MATRIX_PLOTS.get(plot)
-        if matrix_class is not None:
-            try:
-                grouping = MatrixGroupBy[param.upper()]
-            except KeyError:
+            filename = f"{plot}_{param}.{parser_data.default_format}"
+        if param == "*":
+            if RANK_PLOTS.get(plot) is None:
                 print(
-                    f'Grouping "{param}" is not one of {"/".join(GROUPINGS)}. Exiting...',
+                    f'"{plot}" plot does not allow a wildcard as a parameter, or does not exist. Exiting...',
                     file=sys.stderr,
                 )
                 return
-
-            plot_bases.append(
-                (
-                    filename,
-                    matrix_class(Figure(), world_data.meta, component_data, grouping),
-                )
-            )
-        else:
-            rank_class = RANK_PLOTS.get(plot)
-            if rank_class is None:
-                print("Plot type does not exist. Exiting...", file=sys.stderr)
-                return
-            try:
-                rank = int(param) if param != "*" else "*"
-                if rank != "*" and (rank < 0 or rank > world_data.meta.num_processes):
-                    raise ValueError("Rank out-of-range.")
-            except ValueError:
-                print(
-                    f"A valid rank needs to be specified for plot type {plot}. Exiting...",
-                    file=sys.stderr,
-                )
-                return
-            if rank != "*":
-                plot_bases.append(
-                    (
-                        filename,
-                        rank_class(Figure(), world_data.meta, component_data, rank),
-                    )
-                )
+            name, ext = filename.rsplit(".", 1)
+            if parser_data.wildcard_rank_min_field_width is None:
+                rank_width = len(str(world_data.meta.num_processes))
+            elif parser_data.wildcard_rank_min_field_width >= 0:
+                rank_width = parser_data.wildcard_rank_min_field_width
             else:
-                name, ext = filename.rsplit(".", 1)
-                if parser_data.wildcard_rank_min_field_width is None:
-                    rank_width = len(str(world_data.meta.num_processes))
-                elif parser_data.wildcard_rank_min_field_width >= 0:
-                    rank_width = parser_data.wildcard_rank_min_field_width
-                else:
-                    print(
-                        "Value for --wildcard-rank-min-field-width must be positive. Exiting...",
-                        file=sys.stderr,
-                    )
-                    return
-                for rank in range(world_data.meta.num_processes):
-                    plot_bases.append(
-                        (
-                            name + f"_{rank:0{rank_width}d}." + ext,
-                            rank_class(Figure(), world_data.meta, component_data, rank),
-                        )
-                    )
+                print(
+                    "Value for --wildcard-rank-min-field-width must be positive. Exiting...",
+                    file=sys.stderr,
+                )
+                return
+            for rank in range(world_data.meta.num_processes):
+                plot_object = create_plot_from_plot_and_param(
+                    plot, str(rank), Figure(), world_data.meta, component_data
+                )
+                plot_bases.append(
+                    (name + f"_{rank:0{rank_width}d}." + ext, plot_object)
+                )
+        else:
+            plot_object = create_plot_from_plot_and_param(
+                plot, param, Figure(), world_data.meta, component_data
+            )
+            plot_bases.append((filename, plot_object))
     output_directory = (
         parser_data.output_directory
         if parser_data.output_directory is not None

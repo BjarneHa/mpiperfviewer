@@ -13,13 +13,15 @@ dependencies = [
     "pyserde>=0.24.0",
     "pyside6>=6.9.0",
     "qtawesome>=1.4.0",
-    "mpiperfcli==0.1.0"
+    "mpiperfcli==0.1.0",
+    "msgpack>=1.1.1",
 ]
 
 [tool.pyright]
 venv = ".venv"
 venvPath = "."
 reportUnknownMemberType = false
+reportUnknownArgumentType = false
 reportMissingTypeStubs = false
 reportAny = false
 

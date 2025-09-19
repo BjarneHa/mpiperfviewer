@@ -1,9 +1,8 @@
 from math import inf, isnan
 
+from mpiperfcli.parser import Component, WorldData
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGridLayout, QGroupBox, QLabel, QWidget
-
-from mpiperfcli.parser import Component, WorldData
 
 SI_PREFIXES = "kMGTPEZYRQ"
 
@@ -22,13 +21,14 @@ def si_str(n: float):
 
 
 class StatisticsView(QGroupBox):
-    _num_items: int = 0
+    _num_items: int
     _layout: QGridLayout
 
     def __init__(
         self, world_data: WorldData, component: Component, parent: QWidget | None = None
     ):
         super().__init__("Statistics", parent)
+        self._num_items = 0
         component_data = world_data.components[component]
         self._layout = QGridLayout(self)
         self.add_stat("#Nodes", f"{world_data.meta.num_nodes:,}")

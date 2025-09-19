@@ -1,6 +1,6 @@
-from enum import StrEnum
-
 import qtawesome as qta
+from mpiperfcli.parser import WorldData
+from mpiperfcli.plots import MatrixGroupBy, MatrixMetric, RankPlotMetric, RankPlotType
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtGui import QIcon, QIntValidator
 from PySide6.QtWidgets import (
@@ -14,61 +14,47 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mpiperfcli.parser import WorldData
-from mpiperfcli.plots import MatrixGroupBy
+
+def rank_type_icon(type: RankPlotType, color: str | None = None) -> QIcon:
+    match type:
+        case type.PIXEL_PLOT:
+            name = "gradient-vertical"
+        case type.BAR3D:
+            name = "cube-outline"
+        case type.BAR:
+            name = "chart-bar"
+    return qta.icon(f"mdi6.{name}", color=color)
 
 
-class MatrixMetric(StrEnum):
-    BYTES_SENT = "bytes sent"
-    MESSAGES_SENT = "messages sent"
-
-    @property
-    def color(self) -> str:
-        match self:
-            case self.BYTES_SENT:
-                return "red"
-            case self.MESSAGES_SENT:
-                return "blue"
-
-    def icon(self, color: str | None = None) -> QIcon:
-        return qta.icon(
-            "mdi6.data-matrix", color=self.color if color is None else color
-        )
+def rank_metric_color(metric: RankPlotMetric):
+    match metric:
+        case metric.SENT_SIZES:
+            return "orange"
+        case metric.MESSAGE_COUNT:
+            return "cyan"
+        case metric.TAGS:
+            return "green"
 
 
-class RankPlotMetric(StrEnum):
-    SENT_SIZES = "sent sizes"
-    MESSAGE_COUNT = "message count"
-    TAGS = "tags"
-
-    @property
-    def color(self) -> str:
-        match self:
-            case self.SENT_SIZES:
-                return "orange"
-            case self.MESSAGE_COUNT:
-                return "cyan"
-            case self.TAGS:
-                return "green"
-
-    def icon(self, color: str | None = None) -> QIcon:
-        return qta.icon("mdi6.circle", color=self.color if color is None else color)
+def rank_metric_icon(metric: RankPlotMetric, color: str | None = None) -> QIcon:
+    return qta.icon(
+        "mdi6.circle", color=rank_metric_color(metric) if color is None else color
+    )
 
 
-class RankPlotType(StrEnum):
-    PIXEL_PLOT = "Pixel Plot"
-    BAR3D = "3D Bar"
-    BAR = "Bar Chart"
+def matrix_metric_color(metric: MatrixMetric) -> str:
+    match metric:
+        case metric.BYTES_SENT:
+            return "red"
+        case metric.MESSAGES_SENT:
+            return "blue"
 
-    def icon(self, color: str | None = None) -> QIcon:
-        match self:
-            case self.PIXEL_PLOT:
-                name = "gradient-vertical"
-            case self.BAR3D:
-                name = "cube-outline"
-            case self.BAR:
-                name = "chart-bar"
-        return qta.icon(f"mdi6.{name}", color=color)
+
+def matrix_metric_icon(metric: MatrixMetric, color: str | None = None) -> QIcon:
+    return qta.icon(
+        "mdi6.data-matrix",
+        color=matrix_metric_color(metric) if color is None else color,
+    )
 
 
 class CreateRankView(QGroupBox):
@@ -90,7 +76,7 @@ class CreateRankView(QGroupBox):
         layout.addWidget(QLabel("Metric"), 1, 0)
         self._metric_box = QComboBox(self)
         for metric in RankPlotMetric:
-            self._metric_box.addItem(metric.icon(), metric)
+            self._metric_box.addItem(rank_metric_icon(metric), metric)
         layout.addWidget(self._metric_box, 1, 1)
         layout.addWidget(QLabel("Plot type"), 2, 0)
         self._type_box = QComboBox(self)
@@ -103,8 +89,8 @@ class CreateRankView(QGroupBox):
         _ = create_button.clicked.connect(self.on_create)
         _ = self._metric_box.currentTextChanged.connect(self.on_select_metric)
 
-    def _add_type(self, metric: RankPlotType):
-        self._type_box.addItem(metric.icon(), metric)
+    def _add_type(self, type: RankPlotType):
+        self._type_box.addItem(rank_type_icon(type), type)
 
     @Slot()
     def on_create(self):
@@ -131,7 +117,7 @@ class CreateRankView(QGroupBox):
 class CreateMatrixView(QGroupBox):
     _metric_box: QComboBox
     _group_by_box: QComboBox
-    create_tab: Signal = Signal(str, int)
+    create_tab: Signal = Signal(str, str)
 
     def __init__(self, parent: QWidget):
         super().__init__("Create Global Communication Matrix", parent)
@@ -139,7 +125,7 @@ class CreateMatrixView(QGroupBox):
         layout.addWidget(QLabel("Metric:"), 0, 0)
         self._metric_box = QComboBox(self)
         for m in MatrixMetric:
-            self._metric_box.addItem(m.icon(), m.value)
+            self._metric_box.addItem(matrix_metric_icon(m), m.value)
         layout.addWidget(self._metric_box, 0, 1)
         group_by_label = QLabel("Group by:")
         layout.addWidget(group_by_label, 1, 0)

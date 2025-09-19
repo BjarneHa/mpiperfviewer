@@ -5,7 +5,7 @@ import sys
 from PySide6.QtCore import QCommandLineParser
 from PySide6.QtWidgets import QApplication
 
-from mpiperfviewer.application_window import ApplicationWindow
+from mpiperfviewer.main_window import MainWindow
 
 
 def main():
@@ -23,10 +23,11 @@ def main():
     parser.addPositionalArgument("component", "Component")
     parser.process(qapp)
 
-    app = ApplicationWindow(parser.positionalArguments())
-    app.show()
-    app.activateWindow()
-    app.raise_()
+    main_window = MainWindow(parser.positionalArguments())
+    main_window.show()
+    main_window.activateWindow()
+    main_window.raise_()
+
     _ = qapp.exec()
 
 

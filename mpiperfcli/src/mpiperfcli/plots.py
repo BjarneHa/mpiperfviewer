@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from enum import StrEnum
 from typing import Any, cast, override
 
@@ -18,18 +19,27 @@ class MatrixGroupBy(StrEnum):
     NODE = "Node"
 
 
-class PlotBase:
+class MatrixMetric(StrEnum):
+    BYTES_SENT = "bytes sent"
+    MESSAGES_SENT = "messages sent"
+
+
+class RankPlotMetric(StrEnum):
+    SENT_SIZES = "sent sizes"
+    MESSAGE_COUNT = "message count"
+    TAGS = "tags"
+
+
+class RankPlotType(StrEnum):
+    PIXEL_PLOT = "Pixel Plot"
+    BAR3D = "3D Bar"
+    BAR = "Bar Chart"
+
+
+class PlotBase(ABC):
     fig: Figure
     world_meta: WorldMeta
     component_data: ComponentData
-
-    @classmethod
-    def cli_name(cls) -> str:
-        raise Exception("Unimplemented")
-
-    @classmethod
-    def filter_types(cls) -> list[FilterType]:
-        return []
 
     def __init__(self, fig: Figure, meta: WorldMeta, component_data: ComponentData):
         super().__init__()
@@ -37,14 +47,25 @@ class PlotBase:
         self.world_meta = meta
         self.component_data = component_data
 
-    def init_plot(self, filters: FilterState):
-        pass
+    @classmethod
+    @abstractmethod
+    def cli_name(cls) -> str: ...
 
-    def cli_param(self) -> str:
-        raise Exception("Unimplemented")
+    @abstractmethod
+    def cli_param(self) -> str: ...
+
+    @classmethod
+    @abstractmethod
+    def filter_types(cls) -> list[FilterType]: ...
+
+    @abstractmethod
+    def init_plot(self, filters: FilterState) -> None: ...
+
+    @abstractmethod
+    def tab_title(self) -> str: ...
 
 
-class MatrixPlotBase(PlotBase):
+class MatrixPlotBase(PlotBase, ABC):
     _plot_title: str
     _legend_label: str
     _cmap: str
@@ -65,6 +86,11 @@ class MatrixPlotBase(PlotBase):
         self._plot_title = plot_title
         self._legend_label = legend_label
         self._cmap = cmap
+
+    @override
+    @classmethod
+    def filter_types(cls) -> list[FilterType]:
+        return []
 
     @override
     def cli_param(self):
@@ -108,6 +134,10 @@ class MatrixPlotBase(PlotBase):
             raise Exception(f"Cannot group by {self._group_by} due to missing data.")
         return group
 
+    @classmethod
+    @abstractmethod
+    def metric(cls) -> MatrixMetric: ...
+
 
 class SizeMatrixPlot(MatrixPlotBase):
     _cmap: str
@@ -143,6 +173,15 @@ class SizeMatrixPlot(MatrixPlotBase):
                     )
         self.plot_matrix(matrix)
 
+    @override
+    @classmethod
+    def metric(cls) -> MatrixMetric:
+        return MatrixMetric.BYTES_SENT
+
+    @override
+    def tab_title(self) -> str:
+        return "total size"
+
 
 class CountMatrixPlot(MatrixPlotBase):
     def __init__(
@@ -168,8 +207,17 @@ class CountMatrixPlot(MatrixPlotBase):
     def init_plot(self, filters: FilterState):
         self.plot_matrix(self.group.count)
 
+    @override
+    @classmethod
+    def metric(cls) -> MatrixMetric:
+        return MatrixMetric.MESSAGES_SENT
 
-class RankPlotBase(PlotBase):
+    @override
+    def tab_title(self) -> str:
+        return "message count"
+
+
+class RankPlotBase(PlotBase, ABC):
     _rank: int
 
     def __init__(
@@ -182,8 +230,20 @@ class RankPlotBase(PlotBase):
     def cli_param(self) -> str:
         return str(self._rank)
 
+    @classmethod
+    @abstractmethod
+    def type(cls) -> RankPlotType: ...
 
-class ThreeDimPlotBase(RankPlotBase):
+    @classmethod
+    @abstractmethod
+    def metric(cls) -> RankPlotMetric: ...
+
+    @override
+    def tab_title(self) -> str:
+        return f"rank {self._rank} – {self.metric()} ({self.type()})"
+
+
+class ThreeDimPlotBase(RankPlotBase, ABC):
     def generate_3d_data(
         self,
         metrics_legend: NDArray[Any],
@@ -224,15 +284,27 @@ class ThreeDimPlotBase(RankPlotBase):
         return (occurances.T, xticks, yticks, procs, metric)
 
 
-class PixelPlotBase(ThreeDimPlotBase):
+class PixelPlotBase(ThreeDimPlotBase, ABC):
     def _get_norm(self, filters: FilterState):
         if isinstance(filters.count, RangeFilter):
             return LogNorm(filters.count.min, filters.count.max)
         else:
             return LogNorm()
 
+    @override
+    @classmethod
+    def type(cls) -> RankPlotType:
+        return RankPlotType.PIXEL_PLOT
 
-class TagsBar3DPlot(ThreeDimPlotBase):
+
+class ThreeDimBarBase(ThreeDimPlotBase, ABC):
+    @override
+    @classmethod
+    def type(cls) -> RankPlotType:
+        return RankPlotType.BAR3D
+
+
+class TagsBar3DPlot(ThreeDimBarBase):
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -269,8 +341,13 @@ class TagsBar3DPlot(ThreeDimPlotBase):
         _ = ax.set_zlabel("No. of messages")
         _ = ax.set_title(f"Messages with tag to peer from Rank {self._rank}")
 
+    @override
+    @classmethod
+    def metric(cls) -> RankPlotMetric:
+        return RankPlotMetric.TAGS
 
-class SizeBar3DPlot(ThreeDimPlotBase):
+
+class SizeBar3DPlot(ThreeDimBarBase):
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -306,6 +383,11 @@ class SizeBar3DPlot(ThreeDimPlotBase):
         _ = ax.set_zlabel("Messages sent")
         _ = ax.set_title(f"Messages with size to peer from Rank {self._rank}")
 
+    @override
+    @classmethod
+    def metric(cls) -> RankPlotMetric:
+        return RankPlotMetric.SENT_SIZES
+
 
 class Counts2DBarPlot(RankPlotBase):
     @override
@@ -333,6 +415,16 @@ class Counts2DBarPlot(RankPlotBase):
         _ = ax.set_xlabel("MPI_COMM_WORLD Rank")
         _ = ax.set_ylabel("Messages sent")
         _ = ax.set_title(f"Messages sent to peers by Rank {self._rank}")
+
+    @override
+    @classmethod
+    def metric(cls) -> RankPlotMetric:
+        return RankPlotMetric.MESSAGE_COUNT
+
+    @override
+    @classmethod
+    def type(cls) -> RankPlotType:
+        return RankPlotType.BAR
 
 
 class TagsPixelPlot(PixelPlotBase):
@@ -370,6 +462,11 @@ class TagsPixelPlot(PixelPlotBase):
 
         _ = cbar.ax.set_ylabel("Message count", rotation=-90, va="bottom")
 
+    @override
+    @classmethod
+    def metric(cls) -> RankPlotMetric:
+        return RankPlotMetric.TAGS
+
 
 class SizePixelPlot(PixelPlotBase):
     @override
@@ -405,3 +502,8 @@ class SizePixelPlot(PixelPlotBase):
         cbar = self.fig.colorbar(img)
 
         _ = cbar.ax.set_ylabel("Message count", rotation=-90, va="bottom")
+
+    @override
+    @classmethod
+    def metric(cls) -> RankPlotMetric:
+        return RankPlotMetric.SENT_SIZES

@@ -3,6 +3,16 @@ from typing import override
 
 import numpy as np
 import qtawesome as qta
+from mpiperfcli.filters import (
+    BadFilter,
+    DiscreteMultiRangeFilter,
+    Filter,
+    FilterState,
+    FilterType,
+    InvertedFilter,
+    RangeFilter,
+    Unfiltered,
+)
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
@@ -19,22 +29,19 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-from mpiperfcli.filters import (
-    BadFilter,
-    DiscreteMultiRangeFilter,
-    Filter,
-    FilterState,
-    FilterType,
-    InvertedFilter,
-    RangeFilter,
-    Unfiltered,
-)
+from serde import serde
 
 
 class FilterObjectBase(QObject):
     def update_filterstate(self, fs: FilterState) -> None:
         raise Exception("Unimplemented!")
+
+
+@serde
+class RangeFilterData:
+    enabled: bool
+    min: int | None
+    max: int | None
 
 
 class RangeFilterObject(FilterObjectBase):
@@ -97,6 +104,20 @@ class RangeFilterObject(FilterObjectBase):
         self._checkbox.setCheckState(other._checkbox.checkState())
         self._min_edit.setText(other._min_edit.text())
         self._max_edit.setText(other._max_edit.text())
+
+    def import_preset(self, preset: RangeFilterData):
+        self._checkbox.setChecked(preset.enabled)
+        self._min_edit.setText(str(preset.min) if preset.min is not None else "")
+        self._max_edit.setText(str(preset.max) if preset.max is not None else "")
+
+    def export_data(self):
+        min = self._min_edit.text()
+        max = self._max_edit.text()
+        return RangeFilterData(
+            self._checkbox.isChecked(),
+            int(min) if min != "" else None,
+            int(max) if max != "" else None,
+        )
 
 
 DISCRETE_MULTIRANGE_REGEXP = r"[inf0-9,;\+\-\[\]]*"
@@ -172,6 +193,11 @@ class CollectivesDialog(QDialog):
     def copy_values(self, other: "CollectivesDialog"):
         for self_cb, other_cb in zip(self.checkboxes, other.checkboxes):
             self_cb.setCheckState(other_cb.checkState())
+
+
+@serde
+class DiscreteMultiRangeFilterData:
+    data: str
 
 
 class DiscreteMultiRangeFilterWidget(QWidget):
@@ -265,6 +291,25 @@ class DiscreteMultiRangeFilterWidget(QWidget):
         self._line_edit.setText(other._line_edit.text())
         self._collectives.copy_values(other._collectives)
 
+    def import_preset(self, preset: DiscreteMultiRangeFilterData):
+        self._line_edit.setText(preset.data)
+
+    def export_data(self):
+        return DiscreteMultiRangeFilterData(self._line_edit.text())
+
+
+class TagFilterMode(IntEnum):
+    INCLUDE = 0
+    EXCLUDE = 1
+
+
+@serde
+class TagFilterData:
+    enabled: bool
+    mode: int
+    include_preset: DiscreteMultiRangeFilterData
+    exclude_preset: DiscreteMultiRangeFilterData
+
 
 class TagFilterObject(FilterObjectBase):
     _checkbox: QCheckBox
@@ -273,10 +318,6 @@ class TagFilterObject(FilterObjectBase):
     _include_radio: QRadioButton
     _exclude_filter: DiscreteMultiRangeFilterWidget
     _exclude_radio: QRadioButton
-
-    class RadioOptions(IntEnum):
-        INCLUDE = 0
-        EXCLUDE = 1
 
     def __init__(self, layout: QGridLayout, parent: QWidget | None = None):
         super().__init__(parent)
@@ -291,9 +332,7 @@ class TagFilterObject(FilterObjectBase):
 
         self._include_radio = QRadioButton(parent)
         self._include_radio.setChecked(True)
-        self._radio_group.addButton(
-            self._include_radio, TagFilterObject.RadioOptions.INCLUDE
-        )
+        self._radio_group.addButton(self._include_radio, TagFilterMode.INCLUDE)
         self._include_radio.setText("Include")
         layout.addWidget(self._include_radio, r + 1, 0, 1, 5)
 
@@ -301,9 +340,7 @@ class TagFilterObject(FilterObjectBase):
         layout.addWidget(self._include_filter, r + 2, 0, 1, 5)
 
         self._exclude_radio = QRadioButton(parent)
-        self._radio_group.addButton(
-            self._exclude_radio, TagFilterObject.RadioOptions.EXCLUDE
-        )
+        self._radio_group.addButton(self._exclude_radio, TagFilterMode.EXCLUDE)
         self._exclude_radio.setText("Exclude")
         layout.addWidget(self._exclude_radio, r + 3, 0, 1, 5)
 
@@ -324,9 +361,9 @@ class TagFilterObject(FilterObjectBase):
         if not self._checkbox.isChecked():
             return Unfiltered()
         match self._radio_group.checkedId():
-            case TagFilterObject.RadioOptions.INCLUDE:
+            case TagFilterMode.INCLUDE:
                 return self._include_filter.state()
-            case TagFilterObject.RadioOptions.EXCLUDE:
+            case TagFilterMode.EXCLUDE:
                 exclude_filter = self._exclude_filter.state()
                 if type(exclude_filter) is BadFilter:
                     return exclude_filter
@@ -344,6 +381,24 @@ class TagFilterObject(FilterObjectBase):
         self._radio_group.button(checked_id).setChecked(True)
         self._include_filter.copy_values(other._include_filter)
         self._exclude_filter.copy_values(other._exclude_filter)
+
+    def import_preset(self, preset: TagFilterData):
+        self._checkbox.setChecked(preset.enabled)
+        match TagFilterMode(preset.mode):
+            case TagFilterMode.INCLUDE:
+                self._include_radio.setChecked(True)
+            case TagFilterMode.EXCLUDE:
+                self._exclude_radio.setChecked(True)
+        self._include_filter.import_preset(preset.include_preset)
+        self._exclude_filter.import_preset(preset.exclude_preset)
+
+    def export_data(self):
+        return TagFilterData(
+            self._checkbox.isChecked(),
+            self._radio_group.checkedId(),
+            self._include_filter.export_data(),
+            self._exclude_filter.export_data(),
+        )
 
 
 class SizeFilterObject(RangeFilterObject):
@@ -370,15 +425,23 @@ class CountFilterObject(RangeFilterObject):
         fs.count = super().state()
 
 
+@serde
+class FilterViewData:
+    test: int
+    size_preset: RangeFilterData | None
+    count_preset: RangeFilterData | None
+    tags_preset: TagFilterData | None
+
+
 class FilterView(QGroupBox):
     filters_changed: Signal = Signal()
     filter_applied_globally: Signal = Signal(object)
     _size_filter: SizeFilterObject | None
     _count_filter: CountFilterObject | None
     _tags_filter: TagFilterObject | None
-    _apply_buttons: dict[QPushButton, FilterObjectBase] = dict()
-    _apply_everywhere_buttons: dict[QPushButton, FilterObjectBase] = dict()
-    _filter_state: FilterState = FilterState()
+    _apply_buttons: dict[QPushButton, FilterObjectBase]
+    _apply_everywhere_buttons: dict[QPushButton, FilterObjectBase]
+    _filter_state: FilterState
     _layout: QGridLayout
 
     @property
@@ -391,16 +454,25 @@ class FilterView(QGroupBox):
         parent: QWidget | None = None,
     ):
         super().__init__("Filter", parent)
+        self._apply_buttons = {}
+        self._apply_everywhere_buttons = {}
+        self._filter_state = FilterState()
         self._layout = QGridLayout(self)
         if filter_types is None or FilterType.SIZE in filter_types:
             self._size_filter = SizeFilterObject(self._layout, self)
             self._add_filter_object(self._size_filter)
+        else:
+            self._size_filter = None
         if filter_types is None or FilterType.COUNT in filter_types:
             self._count_filter = CountFilterObject(self._layout, self)
             self._add_filter_object(self._count_filter)
+        else:
+            self._count_filter = None
         if filter_types is None or FilterType.TAGS in filter_types:
             self._tags_filter = TagFilterObject(self._layout, self)
             self._add_filter_object(self._tags_filter)
+        else:
+            self._tags_filter = None
         self._layout.setRowStretch(self._layout.rowCount(), 1)
 
     def _add_filter_object(self, object: FilterObjectBase):
@@ -464,3 +536,24 @@ class FilterView(QGroupBox):
             case FilterObjectBase():
                 raise Exception("Unreachable!")
         self._apply_filter_object(filter_object)
+
+    def export_data(self):
+        return FilterViewData(
+            1,
+            self._size_filter.export_data() if self._size_filter is not None else None,
+            self._count_filter.export_data()
+            if self._count_filter is not None
+            else None,
+            self._tags_filter.export_data() if self._tags_filter is not None else None,
+        )
+
+    def import_preset(self, preset: FilterViewData):
+        if preset.size_preset is not None and self._size_filter is not None:
+            self._size_filter.import_preset(preset.size_preset)
+            self._size_filter.update_filterstate(self._filter_state)
+        if preset.count_preset is not None and self._count_filter is not None:
+            self._count_filter.import_preset(preset.count_preset)
+            self._count_filter.update_filterstate(self._filter_state)
+        if preset.tags_preset is not None and self._tags_filter is not None:
+            self._tags_filter.import_preset(preset.tags_preset)
+            self._tags_filter.update_filterstate(self._filter_state)

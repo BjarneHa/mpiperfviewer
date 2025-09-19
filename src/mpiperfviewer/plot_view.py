@@ -1,11 +1,30 @@
-from typing import Callable
+from itertools import chain
+from pathlib import Path
+from typing import Callable, override
 
 import qtawesome as qta
 from matplotlib.backends.backend_qt import NavigationToolbar2QT
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
+from mpiperfcli.parser import Component, ComponentData, WorldData, WorldMeta
+from mpiperfcli.plots import (
+    CountMatrixPlot,
+    Counts2DBarPlot,
+    MatrixGroupBy,
+    MatrixMetric,
+    MatrixPlotBase,
+    PlotBase,
+    RankPlotBase,
+    RankPlotMetric,
+    RankPlotType,
+    SizeBar3DPlot,
+    SizeMatrixPlot,
+    SizePixelPlot,
+    TagsBar3DPlot,
+    TagsPixelPlot,
+)
 from PySide6.QtCore import Signal, Slot
-from PySide6.QtGui import QFont, QGuiApplication, QIcon
+from PySide6.QtGui import QCloseEvent, QFont, QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
@@ -15,50 +34,53 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from serde import serde
 
-from mpiperfcli.parser import Component, WorldData
-from mpiperfcli.plots import (
-    CountMatrixPlot,
-    Counts2DBarPlot,
-    MatrixGroupBy,
-    PlotBase,
-    SizeBar3DPlot,
-    SizeMatrixPlot,
-    SizePixelPlot,
-    TagsBar3DPlot,
-    TagsPixelPlot,
-)
+from mpiperfcli import create_plot_from_plot_and_param
 from mpiperfviewer.create_views import (
-    MatrixMetric,
-    RankPlotMetric,
-    RankPlotType,
+    matrix_metric_icon,
+    rank_metric_color,
+    rank_type_icon,
 )
-from mpiperfviewer.filter_widgets import FilterView
+from mpiperfviewer.filter_widgets import FilterView, FilterViewData
+from mpiperfviewer.project_state import project_updated
+
+
+@serde
+class PlotWidgetExportData:
+    name: str
+    param: str
+    filters: FilterViewData
+
+
+def get_icon_for_plot(plot: PlotBase):
+    if isinstance(plot, RankPlotBase):
+        return rank_type_icon(plot.type(), rank_metric_color(plot.metric()))
+    elif isinstance(plot, MatrixPlotBase):
+        return matrix_metric_icon(plot.metric())
 
 
 class PlotWidget(QWidget):
-    title: str
     icon: QIcon | None
     plot: PlotBase
+    canvas: FigureCanvasQTAgg
     filter_view: FilterView
     reattach_or_detach_requested: Signal = Signal()
+    closed: Signal = Signal()
     _reattach_or_detach_button: QPushButton
     _cmd_line_edit: QLineEdit
 
     def __init__(
         self,
-        title: str,
         plot_factory: Callable[[Figure], PlotBase],
-        icon: QIcon | None = None,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        self.title = title
-        self.icon = icon
         layout = QHBoxLayout(self)
         plot_box = QGroupBox("Plot", self)
         self.canvas = FigureCanvasQTAgg()
         self.plot = plot_factory(self.canvas.figure)
+        self.icon = get_icon_for_plot(self.plot)
         self.filter_view = FilterView(self.plot.filter_types(), self)
         _ = self.filter_view.filters_changed.connect(self.filters_changed)
         layout.addWidget(plot_box, stretch=1)
@@ -72,7 +94,7 @@ class PlotWidget(QWidget):
         toolbar_layout.addWidget(NavigationToolbar2QT(self.canvas, self))
         self._reattach_or_detach_button = QPushButton("Detach")
         self._reattach_or_detach_button.setIcon(qta.icon("mdi6.open-in-new"))
-        self._reattach_or_detach_button.clicked.connect(self._attach_detach_clicked)
+        _ = self._reattach_or_detach_button.clicked.connect(self._attach_detach_clicked)
         toolbar_layout.addWidget(self._reattach_or_detach_button)
         cmd_layout = QHBoxLayout()
         self._cmd_line_edit = QLineEdit(self, readOnly=True)
@@ -100,6 +122,10 @@ class PlotWidget(QWidget):
         cmd += f' "{self.plot.component_data.name}"'
         self._cmd_line_edit.setText(cmd)
 
+    @property
+    def title(self):
+        return self.plot.tab_title()
+
     @Slot()
     def _copy_cmd(self):
         clipboard = QGuiApplication.clipboard()
@@ -118,35 +144,91 @@ class PlotWidget(QWidget):
 
     @Slot()
     def filters_changed(self):
+        project_updated()
         self.plot.fig.clear()
         self.init_plot()
         self.canvas.draw_idle()
         self._update_cmd()
 
+    @override
+    def closeEvent(self, _event: QCloseEvent) -> None:
+        self.closed.emit()
+
     def init_plot(self):
         self.plot.init_plot(self.filter_view.filter_state)
+
+    def export_plot(self):
+        return PlotWidgetExportData(
+            name=self.plot.cli_name(),
+            param=self.plot.cli_param(),
+            filters=self.filter_view.export_data(),
+        )
+
+    @staticmethod
+    def import_plot(
+        data: PlotWidgetExportData,
+        world_meta: WorldMeta,
+        component_data: ComponentData,
+        parent: QWidget | None = None,
+    ):
+        widget = PlotWidget(
+            lambda f: create_plot_from_plot_and_param(
+                data.name, data.param, f, world_meta, component_data
+            ),
+            parent,
+        )
+        widget.filter_view.import_preset(data.filters)
+        return widget
+
+
+@serde
+class ProjectData:
+    source_directory: Path | None
+    component: str | None
+    tab_plots: list[PlotWidgetExportData]
+    detached_plots: list[PlotWidgetExportData]
 
 
 class PlotViewer(QGroupBox):
     _world_data: WorldData
-    _plots: list[PlotWidget] = list()
+    _detached_plots: list[PlotWidget]
     _tab_widget: QTabWidget
     _component: Component
 
     def __init__(
-        self, world_data: WorldData, component: Component, parent: QWidget | None = None
+        self,
+        world_data: WorldData,
+        project_data: ProjectData,
+        parent: QWidget | None = None,
     ):
         super().__init__("Plot Viewer", parent)
-        self._component = component
+        self._detached_plots = []
+        if project_data.component is None:
+            raise Exception("Invalid component for project.")
+        self._component = project_data.component
         self._world_data = world_data
         layout = QVBoxLayout(self)
         # mplstyle.use("fast")
 
         self._tab_widget = QTabWidget(self, tabsClosable=True)
         layout.addWidget(self._tab_widget)
-        self._initialize_tabs()
+        self._initialize_tabs(project_data)
         self._tab_widget.setMovable(True)
         _ = self._tab_widget.tabCloseRequested.connect(self.close_tab)
+
+    @property
+    def _all_plots(self):
+        return chain(self._tab_plots, self._detached_plots)
+
+    @property
+    def _tab_plots(self):
+        return [
+            widget
+            for widget in [
+                self._tab_widget.widget(i) for i in range(self._tab_widget.count())
+            ]
+            if isinstance(widget, PlotWidget)
+        ]
 
     @property
     def world_data(self):
@@ -156,27 +238,50 @@ class PlotViewer(QGroupBox):
     def component_data(self):
         return self._world_data.components[self._component]
 
-    def _initialize_tabs(self):
-        self.add_matrix_plot(MatrixMetric.MESSAGES_SENT, MatrixGroupBy.RANK)
-        self.add_matrix_plot(MatrixMetric.BYTES_SENT, MatrixGroupBy.RANK)
+    def _initialize_tabs(self, data: ProjectData):
+        if len(data.tab_plots) + len(data.detached_plots) == 0:
+            self.add_matrix_plot(MatrixMetric.MESSAGES_SENT, MatrixGroupBy.RANK)
+            self.add_matrix_plot(MatrixMetric.BYTES_SENT, MatrixGroupBy.RANK)
+            return
+        for plot in data.tab_plots:
+            plot_widget = PlotWidget.import_plot(
+                plot, self.world_data.meta, self.component_data, self
+            )
+            self.add_plot_widget(plot_widget)
+        for plot in data.detached_plots:
+            plot_widget = PlotWidget.import_plot(
+                plot, self.world_data.meta, self.component_data, self
+            )
+            self.add_plot_widget(plot_widget, detached=True)
 
-    def add_tab(self, plot: PlotWidget, activate: bool = False):
+    def add_plot_widget(
+        self, plot: PlotWidget, detached: bool = False, activate: bool = False
+    ):
+        project_updated()
+        _ = plot.closed.connect(self.plotwidget_closed)
         _ = plot.reattach_or_detach_requested.connect(self.reattach_or_detach_tab)
-        if plot.icon is None:
-            _ = self._tab_widget.addTab(plot, plot.title)
-        else:
-            _ = self._tab_widget.addTab(plot, plot.icon, plot.title)
-        self._plots.append(plot)
-        for other_plot in self._plots:
+        for other_plot in self._all_plots:
             _ = plot.filter_view.filter_applied_globally.connect(
                 other_plot.filter_view.apply_nonlocal_filter
             )
             _ = other_plot.filter_view.filter_applied_globally.connect(
                 plot.filter_view.apply_nonlocal_filter
             )
+        if detached:
+            plot.setParent(None)
+            plot.showNormal()
+            self._detached_plots.append(plot)
+            if activate:
+                plot.raise_()
+                plot.activateWindow()
+        else:
+            if plot.icon is None:
+                _ = self._tab_widget.addTab(plot, plot.title)
+            else:
+                _ = self._tab_widget.addTab(plot, plot.icon, plot.title)
+            if activate:
+                self._tab_widget.setCurrentWidget(plot)
         plot.init_plot()
-        if activate:
-            self._tab_widget.setCurrentWidget(plot)
 
     @Slot()
     def reattach_or_detach_tab(self):
@@ -184,11 +289,13 @@ class PlotViewer(QGroupBox):
         if not isinstance(sender, PlotWidget):
             raise Exception(f"Detach was called outside of a plot, from {sender}.")
         if sender.parent() is not None:  # pyright: ignore[reportUnnecessaryComparison]
+            self._detached_plots.append(sender)
             index = self._tab_widget.indexOf(sender)
             self._tab_widget.removeTab(index)
             sender.setParent(None)
             sender.showNormal()
         else:
+            self._detached_plots.remove(sender)
             if sender.icon is None:
                 _ = self._tab_widget.addTab(sender, sender.title)
             else:
@@ -196,21 +303,27 @@ class PlotViewer(QGroupBox):
 
     @Slot()
     def close_tab(self, index: int):
+        project_updated()
         self._tab_widget.removeTab(index)
-        plot = self._plots.pop(index)
-        for plot in self._plots:
-            _ = plot.filter_view.filter_applied_globally.disconnect(
-                plot.filter_view.apply_nonlocal_filter
+
+    @Slot()
+    def plotwidget_closed(self):
+        sender = self.sender()
+        if not isinstance(sender, PlotWidget):
+            raise Exception(
+                f"plotwidget_closed was called outside of a plot, from {sender}."
             )
-            _ = plot.filter_view.filter_applied_globally.disconnect(
-                plot.filter_view.apply_nonlocal_filter
-            )
+        if sender.parent() is not None:  # pyright: ignore[reportUnnecessaryComparison]
+            return
+        try:
+            self._detached_plots.remove(sender)
+        except ValueError:
+            print(f"{sender} not removed detached lit")
 
     @Slot()
     def add_rank_plot(self, rank: int, metric: str, type: str):
         metric = RankPlotMetric(metric)
         type = RankPlotType(type)
-        tab_title = f"rank {rank} – {metric} ({type})"
         match metric:
             case RankPlotMetric.TAGS:
                 match type:
@@ -231,40 +344,37 @@ class PlotViewer(QGroupBox):
             case RankPlotMetric.MESSAGE_COUNT:
                 PlotType = Counts2DBarPlot
 
-        icon = type.icon(color=metric.color)
         plot_widget = PlotWidget(
-            tab_title,
             lambda f: PlotType(f, self._world_data.meta, self.component_data, rank),
-            icon=icon,
             parent=self,
         )
-        self.add_tab(plot_widget, activate=True)
+        self.add_plot_widget(plot_widget, activate=True)
 
-    @Slot()
+    @Slot(str, str)
     def add_matrix_plot(self, metric: str, group_by: str):
         metric = MatrixMetric(metric)
         group_by = MatrixGroupBy(group_by)
         match metric:
             case MatrixMetric.BYTES_SENT:
-                tab_title = "total size"
                 PlotType = SizeMatrixPlot
-
             case MatrixMetric.MESSAGES_SENT:
-                tab_title = "message count"
                 PlotType = CountMatrixPlot
-        icon = metric.icon()
         widget = PlotWidget(
-            tab_title,
             lambda fig: PlotType(
                 fig, self._world_data.meta, self.component_data, group_by
             ),
-            icon=icon,
             parent=self,
         )
-        self.add_tab(widget, activate=True)
+        self.add_plot_widget(widget, activate=True)
 
     def _update_plots(self):
-        for plot in self._plots:
+        for plot in self._all_plots:
             plot.canvas.figure.clear()
             plot.init_plot()
             plot.canvas.draw_idle()
+
+    def export_tab_plots(self):
+        return [plot.export_plot() for plot in self._tab_plots]
+
+    def export_detached_plots(self):
+        return [plot.export_plot() for plot in self._detached_plots]
