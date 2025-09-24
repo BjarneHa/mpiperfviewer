@@ -42,7 +42,7 @@ from mpiperfviewer.create_views import (
     rank_metric_color,
     rank_type_icon,
 )
-from mpiperfviewer.filter_widgets import FilterView, FilterViewData
+from mpiperfviewer.filter_widgets import FilterPresets, FilterView, FilterViewData
 from mpiperfviewer.project_state import project_updated
 
 
@@ -73,6 +73,7 @@ class PlotWidget(QWidget):
     def __init__(
         self,
         plot_factory: Callable[[Figure], PlotBase],
+        presets: FilterPresets,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -81,7 +82,7 @@ class PlotWidget(QWidget):
         self.canvas = FigureCanvasQTAgg()
         self.plot = plot_factory(self.canvas.figure)
         self.icon = get_icon_for_plot(self.plot)
-        self.filter_view = FilterView(self.plot.filter_types(), self)
+        self.filter_view = FilterView(presets, self.plot.filter_types(), self)
         _ = self.filter_view.filters_changed.connect(self.filters_changed)
         layout.addWidget(plot_box, stretch=1)
         layout.addWidget(self.filter_view, stretch=0)
@@ -169,12 +170,14 @@ class PlotWidget(QWidget):
         data: PlotWidgetExportData,
         world_meta: WorldMeta,
         component_data: ComponentData,
+        presets: FilterPresets,
         parent: QWidget | None = None,
     ):
         widget = PlotWidget(
             lambda f: create_plot_from_plot_and_param(
                 data.name, data.param, f, world_meta, component_data
             ),
+            presets,
             parent,
         )
         widget.filter_view.import_preset(data.filters)
@@ -187,6 +190,7 @@ class ProjectData:
     component: str | None
     tab_plots: list[PlotWidgetExportData]
     detached_plots: list[PlotWidgetExportData]
+    presets: FilterPresets
 
 
 class PlotViewer(QGroupBox):
@@ -194,6 +198,7 @@ class PlotViewer(QGroupBox):
     _detached_plots: list[PlotWidget]
     _tab_widget: QTabWidget
     _component: Component
+    presets: FilterPresets
 
     def __init__(
         self,
@@ -203,6 +208,7 @@ class PlotViewer(QGroupBox):
     ):
         super().__init__("Plot Viewer", parent)
         self._detached_plots = []
+        self.presets = project_data.presets
         if project_data.component is None:
             raise Exception("Invalid component for project.")
         self._component = project_data.component
@@ -245,12 +251,12 @@ class PlotViewer(QGroupBox):
             return
         for plot in data.tab_plots:
             plot_widget = PlotWidget.import_plot(
-                plot, self.world_data.meta, self.component_data, self
+                plot, self.world_data.meta, self.component_data, self.presets, self
             )
             self.add_plot_widget(plot_widget)
         for plot in data.detached_plots:
             plot_widget = PlotWidget.import_plot(
-                plot, self.world_data.meta, self.component_data, self
+                plot, self.world_data.meta, self.component_data, self.presets, self
             )
             self.add_plot_widget(plot_widget, detached=True)
 
@@ -346,6 +352,7 @@ class PlotViewer(QGroupBox):
 
         plot_widget = PlotWidget(
             lambda f: PlotType(f, self._world_data.meta, self.component_data, rank),
+            presets=self.presets,
             parent=self,
         )
         self.add_plot_widget(plot_widget, activate=True)
@@ -363,6 +370,7 @@ class PlotViewer(QGroupBox):
             lambda fig: PlotType(
                 fig, self._world_data.meta, self.component_data, group_by
             ),
+            presets=self.presets,
             parent=self,
         )
         self.add_plot_widget(widget, activate=True)

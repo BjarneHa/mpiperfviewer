@@ -13,7 +13,12 @@ from mpiperfcli.filters import (
     RangeFilter,
     Unfiltered,
 )
-from PySide6.QtCore import QObject, Qt, Signal, Slot
+from PySide6.QtCore import (
+    QObject,
+    Qt,
+    Signal,
+    Slot,
+)
 from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -21,15 +26,193 @@ from PySide6.QtWidgets import (
     QDialog,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QRadioButton,
     QVBoxLayout,
     QWidget,
 )
-from serde import serde
+from serde import field, serde
+
+
+class PresetEditDialog[T](QDialog):
+    _ok: bool
+    _filter_layout: QGridLayout
+    _name_edit: QLineEdit
+    _finish_button: QPushButton
+
+    def __init__(self, parent: QWidget, name: str):
+        super().__init__(parent)
+        self._ok = False
+        self.setWindowTitle("Edit preset")
+        layout = QVBoxLayout(self)
+        general_group = QGroupBox("General", self)
+        filter_group = QGroupBox("Filter", self)
+        general_layout = QGridLayout(general_group)
+        self._filter_layout = QGridLayout(filter_group)
+        layout.addWidget(general_group)
+        layout.addWidget(filter_group)
+
+        name_label = QLabel(self, text="Preset name:")
+        self._name_edit = QLineEdit(self, text=name)
+        _ = self._name_edit.textChanged.connect(self._name_changed)
+        general_layout.addWidget(name_label, 0, 0)
+        general_layout.addWidget(self._name_edit, 0, 1)
+
+        footer_buttons = QHBoxLayout()
+        layout.addLayout(footer_buttons)
+        self._finish_button = QPushButton("Finish")
+        self._finish_button.setIcon(qta.icon("mdi6.check"))
+        self._finish_button.setEnabled(False)
+        _ = self._finish_button.clicked.connect(self._finish_clicked)
+        footer_buttons.addWidget(self._finish_button)
+        close_button = QPushButton("Cancel")
+        close_button.setIcon(qta.icon("mdi6.close"))
+        _ = close_button.clicked.connect(self.close)
+        footer_buttons.addWidget(close_button)
+
+    @Slot()
+    def _name_changed(self, text: str):
+        self._finish_button.setEnabled(len(text.rstrip()) > 0)
+
+    @Slot()
+    def _finish_clicked(self):
+        self._ok = True
+        _ = self.close()
+
+
+class AbstractPresetDialog[T](QDialog):
+    _ok: bool
+    _list_widget: QListWidget
+    _presets: dict[str, T]
+    _apply_button: QPushButton
+    _edit_button: QPushButton
+
+    def __init__[U](
+        self,
+        presets: dict[str, T],
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self._presets = presets
+        self._ok = False
+        self.setWindowTitle("Presets")
+        layout = QVBoxLayout(self)
+        list_layout = QHBoxLayout()
+        layout.addLayout(list_layout)
+        self._list_widget = QListWidget(self)
+        _ = self._list_widget.itemSelectionChanged.connect(self._item_selection_changed)
+        for preset in presets.keys():
+            self._list_widget.addItem(preset)
+        list_layout.addWidget(self._list_widget)
+        buttons_layout = QVBoxLayout()
+        list_layout.addLayout(buttons_layout)
+        create_button = QPushButton(self)
+        create_button.setIcon(qta.icon("mdi6.plus"))
+        create_button.setToolTip("Create a new preset.")
+        _ = create_button.clicked.connect(self._add_clicked)
+        buttons_layout.addWidget(create_button)
+        self._edit_button = QPushButton(self)
+        self._edit_button.setIcon(qta.icon("mdi6.pencil"))
+        self._edit_button.setToolTip("Edit the selected preset.")
+        self._edit_button.setEnabled(False)
+        _ = self._edit_button.clicked.connect(self._edit_clicked)
+        buttons_layout.addWidget(self._edit_button)
+        delete_button = QPushButton(self)
+        delete_button.setIcon(qta.icon("mdi6.delete"))
+        delete_button.setToolTip("Delete the selected preset.")
+        _ = delete_button.clicked.connect(self._remove_clicked)
+        buttons_layout.addWidget(delete_button)
+        buttons_layout.addStretch()
+        footer_buttons = QHBoxLayout()
+        self._apply_button = QPushButton("Apply")
+        self._apply_button.setIcon(qta.icon("mdi6.check"))
+        self._apply_button.clicked.connect(self._apply_clicked)
+        footer_buttons.addWidget(self._apply_button)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setIcon(qta.icon("mdi6.close"))
+        _ = cancel_button.clicked.connect(self.close)
+        footer_buttons.addWidget(cancel_button)
+        layout.addLayout(footer_buttons)
+
+    def _warn_duplicate_name(self, name: str):
+        _ = QMessageBox.warning(
+            self,
+            "Choose a different name.",
+            f'Preset "{name}" already exists. Please choose a different name.',
+        )
+
+    @Slot()
+    def _apply_clicked(self):
+        self._ok = True
+        _ = self.close()
+
+    @Slot()
+    def _add_clicked(self):
+        ok, name, preset = self._open_preset_edit_dialog("", None)
+        if not ok:
+            return
+        while name in self._presets.keys():
+            self._warn_duplicate_name(name)
+            ok, name, preset = self._open_preset_edit_dialog(name, preset)
+            if not ok:
+                return
+        self._presets[name] = preset
+        self._list_widget.addItem(name)
+
+    @Slot()
+    def _edit_clicked(self):
+        indexes = self._list_widget.selectedIndexes()
+        if len(indexes) != 1:
+            return
+        old_index = indexes[0]
+        old_name = self._list_widget.item(old_index.row()).text()
+        ok, name, preset = self._open_preset_edit_dialog(
+            old_name, self._presets[old_name]
+        )
+        if not ok:
+            return
+        while old_name != name and name in self._presets.keys():
+            self._warn_duplicate_name(name)
+            ok, name, preset = self._open_preset_edit_dialog(name, preset)
+            if not ok:
+                return
+        self._presets[name] = preset
+        if name != old_name:
+            del self._presets[old_name]
+            _ = self._list_widget.takeItem(old_index.row())
+            self._list_widget.addItem(name)
+
+    @Slot()
+    def _remove_clicked(self):
+        selected = self._list_widget.selectedIndexes()
+        for item in selected:
+            item = self._list_widget.takeItem(item.row())
+            del self._presets[item.text()]
+
+    @Slot()
+    def _item_selection_changed(self):
+        items = self._list_widget.selectedItems()
+        self._apply_button.setEnabled(len(items) == 1)
+        self._edit_button.setEnabled(len(items) == 1)
+
+    def _open_preset_edit_dialog(self, name: str, preset: T|None) -> tuple[bool, str, T]:
+        raise Exception("Unimplemented!")
+
+    def get_preset(self):
+        _ = self.exec_()
+        if not self._ok:
+            return None
+        items = self._list_widget.selectedItems()
+        match items:
+            case [item]:
+                return self._presets[item.text()]
+            case _:
+                return None
 
 
 class FilterObjectBase(QObject):
@@ -48,20 +231,34 @@ class RangeFilterObject(FilterObjectBase):
     _checkbox: QCheckBox
     _min_edit: QLineEdit
     _max_edit: QLineEdit
+    _parent_widget: QWidget
+    _presets: dict[str, RangeFilterData] | None
 
     def __init__(
         self,
         filter: str,
         description: str,
         layout: QGridLayout,
-        parent: QWidget | None = None,
+        parent: QWidget,
+        presets: dict[str, RangeFilterData] | None = None,
     ):
         super().__init__(parent)
+        self._parent_widget = parent
+        self._presets = presets
         self._checkbox = QCheckBox(filter, parent)
         self._checkbox.setToolTip(description)
         _ = self._checkbox.checkStateChanged.connect(self._check_changed)
         r = layout.rowCount()
-        layout.addWidget(self._checkbox, r, 0, 1, 5)
+        header_layout = QHBoxLayout()
+        header_layout.addWidget(self._checkbox)
+        header_layout.addStretch()
+        if presets is not None:
+            preset_button = QPushButton(parent=parent)
+            preset_button.setIcon(qta.icon("mdi6.folder-cog-outline"))
+            preset_button.setToolTip("Use or create a filter preset.")
+            _ = preset_button.clicked.connect(self._open_preset_dialogue)
+            header_layout.addWidget(preset_button)
+        layout.addLayout(header_layout, r, 0, 1, 5)
         self._min_edit = QLineEdit(parent, placeholderText="-∞")
         self._min_edit.setDisabled(True)
         self._min_edit.setValidator(QRegularExpressionValidator(r"-?\d+", self))
@@ -118,6 +315,9 @@ class RangeFilterObject(FilterObjectBase):
             int(min) if min != "" else None,
             int(max) if max != "" else None,
         )
+
+    def _open_preset_dialogue(self) -> None:
+        raise Exception("Unimplemented!")
 
 
 DISCRETE_MULTIRANGE_REGEXP = r"[inf0-9,;\+\-\[\]]*"
@@ -318,16 +518,33 @@ class TagFilterObject(FilterObjectBase):
     _include_radio: QRadioButton
     _exclude_filter: DiscreteMultiRangeFilterWidget
     _exclude_radio: QRadioButton
+    _parent_widget: QWidget
+    _presets: dict[str, TagFilterData] | None
 
-    def __init__(self, layout: QGridLayout, parent: QWidget | None = None):
+    def __init__(
+        self,
+        layout: QGridLayout,
+        parent: QWidget,
+        presets: dict[str, TagFilterData] | None = None,
+    ):
         super().__init__(parent)
+        self._parent_widget = parent
+        self._presets = presets
         tags_description = "Select specific ranges of tags to plot."
         self._checkbox = QCheckBox("tags", parent)
         self._checkbox.setToolTip(tags_description)
         _ = self._checkbox.checkStateChanged.connect(self._check_changed)
         r = layout.rowCount()
-        layout.addWidget(self._checkbox, r, 0, 1, 5)
-
+        header_layout = QHBoxLayout()
+        header_layout.addWidget(self._checkbox)
+        header_layout.addStretch()
+        if presets is not None:
+            preset_button = QPushButton(parent=parent)
+            preset_button.setIcon(qta.icon("mdi6.folder-cog-outline"))
+            preset_button.setToolTip("Use or create a filter preset.")
+            _ = preset_button.clicked.connect(self._open_preset_dialog)
+            header_layout.addWidget(preset_button)
+        layout.addLayout(header_layout, r, 0, 1, 5)
         self._radio_group = QButtonGroup(parent, exclusive=True)
 
         self._include_radio = QRadioButton(parent)
@@ -400,16 +617,75 @@ class TagFilterObject(FilterObjectBase):
             self._exclude_filter.export_data(),
         )
 
+    @Slot()
+    def _open_preset_dialog(self):
+        assert self._presets is not None
+        preset = TagFilterPresetDialog(self._presets, self._parent_widget).get_preset()
+        if preset is not None:
+            self.import_preset(preset)
+
+
+class TagFilterPresetEditDialog(PresetEditDialog[TagFilterData]):
+    _filter_obj: TagFilterObject
+
+    def __init__(self, parent: QWidget, name: str, preset: TagFilterData | None):
+        super().__init__(parent, name)
+        self._filter_obj = TagFilterObject(self._filter_layout, self)
+        if preset is not None:
+            self._filter_obj.import_preset(preset)
+
+    def get_result(self) -> tuple[bool, str, TagFilterData]:
+        return self._ok, self._name_edit.text().rstrip(), self._filter_obj.export_data()
+
+
+class TagFilterPresetDialog(AbstractPresetDialog[TagFilterData]):
+    @override
+    def _open_preset_edit_dialog(self, name: str, preset: TagFilterData | None) -> tuple[bool, str, TagFilterData]:
+        dialog = TagFilterPresetEditDialog(self, name, preset)
+        _ = dialog.exec_()
+        return dialog.get_result()
 
 class SizeFilterObject(RangeFilterObject):
     description: str = "Select a specific range of sizes to plot."
 
-    def __init__(self, layout: QGridLayout, parent: QWidget | None = None):
-        super().__init__("size", self.description, layout, parent)
+    def __init__(
+        self,
+        layout: QGridLayout,
+        parent: QWidget,
+        presets: dict[str, RangeFilterData] | None = None,
+    ):
+        super().__init__("size", self.description, layout, parent, presets)
+
+    @override
+    def _open_preset_dialogue(self):
+        assert self._presets is not None
+        preset = SizeFilterPresetDialog(self._presets, self._parent_widget).get_preset()
+        if preset is not None:
+            self.import_preset(preset)
 
     @override
     def update_filterstate(self, fs: FilterState):
         fs.size = super().state()
+
+
+class SizeFilterPresetEditDialog(PresetEditDialog[RangeFilterData]):
+    _filter_obj: SizeFilterObject
+
+    def __init__(self, parent: QWidget, name: str, preset: RangeFilterData | None):
+        super().__init__(parent, name)
+        self._filter_obj = SizeFilterObject(self._filter_layout, self)
+        if preset is not None:
+            self._filter_obj.import_preset(preset)
+
+    def get_result(self) -> tuple[bool, str, RangeFilterData]:
+        return self._ok, self._name_edit.text().rstrip(), self._filter_obj.export_data()
+
+class SizeFilterPresetDialog(AbstractPresetDialog[RangeFilterData]):
+    @override
+    def _open_preset_edit_dialog(self, name: str, preset: RangeFilterData | None) -> tuple[bool, str, RangeFilterData]:
+        dialog = SizeFilterPresetEditDialog(self, name, preset)
+        _ = dialog.exec_()
+        return dialog.get_result()
 
 
 class CountFilterObject(RangeFilterObject):
@@ -417,20 +693,62 @@ class CountFilterObject(RangeFilterObject):
         "Filter out ranks and sizes/tags whose max entry is not within the given range."
     )
 
-    def __init__(self, layout: QGridLayout, parent: QWidget | None = None):
-        super().__init__("count", self.description, layout, parent)
+    def __init__(
+        self,
+        layout: QGridLayout,
+        parent: QWidget,
+        presets: dict[str, RangeFilterData] | None = None,
+    ):
+        super().__init__("count", self.description, layout, parent, presets)
+
+    @override
+    def _open_preset_dialogue(self):
+        assert self._presets is not None
+        preset = CountFilterPresetDialog(self._presets, self._parent_widget).get_preset()
+        if preset is not None:
+            self.import_preset(preset)
 
     @override
     def update_filterstate(self, fs: FilterState):
         fs.count = super().state()
 
+class CountFilterPresetEditDialog(PresetEditDialog[RangeFilterData]):
+    _filter_obj: CountFilterObject
+
+    def __init__(self, parent: QWidget, name: str, preset: RangeFilterData | None):
+        super().__init__(parent, name)
+        self._filter_obj = CountFilterObject(self._filter_layout, self)
+        if preset is not None:
+            self._filter_obj.import_preset(preset)
+
+    def get_result(self) -> tuple[bool, str, RangeFilterData]:
+        return self._ok, self._name_edit.text().rstrip(), self._filter_obj.export_data()
+
+class CountFilterPresetDialog(AbstractPresetDialog[RangeFilterData]):
+    @override
+    def _open_preset_edit_dialog(self, name: str, preset: RangeFilterData | None) -> tuple[bool, str, RangeFilterData]:
+        dialog = CountFilterPresetEditDialog(self, name, preset)
+        _ = dialog.exec_()
+        return dialog.get_result()
 
 @serde
 class FilterViewData:
-    test: int
     size_preset: RangeFilterData | None
     count_preset: RangeFilterData | None
     tags_preset: TagFilterData | None
+
+
+@serde
+class FilterPresets:
+    size_presets: dict[str, RangeFilterData] = field(
+        default_factory=lambda: dict[str, RangeFilterData]()
+    )
+    count_presets: dict[str, RangeFilterData] = field(
+        default_factory=lambda: dict[str, RangeFilterData]()
+    )
+    tags_presets: dict[str, TagFilterData] = field(
+        default_factory=lambda: dict[str, TagFilterData]()
+    )
 
 
 class FilterView(QGroupBox):
@@ -443,6 +761,7 @@ class FilterView(QGroupBox):
     _apply_everywhere_buttons: dict[QPushButton, FilterObjectBase]
     _filter_state: FilterState
     _layout: QGridLayout
+    _presets: FilterPresets
 
     @property
     def filter_state(self):
@@ -450,26 +769,34 @@ class FilterView(QGroupBox):
 
     def __init__(
         self,
+        presets: FilterPresets,
         filter_types: list[FilterType] | None = None,
         parent: QWidget | None = None,
     ):
         super().__init__("Filter", parent)
+        self._presets = presets
         self._apply_buttons = {}
         self._apply_everywhere_buttons = {}
         self._filter_state = FilterState()
         self._layout = QGridLayout(self)
         if filter_types is None or FilterType.SIZE in filter_types:
-            self._size_filter = SizeFilterObject(self._layout, self)
+            self._size_filter = SizeFilterObject(
+                self._layout, self, self._presets.size_presets
+            )
             self._add_filter_object(self._size_filter)
         else:
             self._size_filter = None
         if filter_types is None or FilterType.COUNT in filter_types:
-            self._count_filter = CountFilterObject(self._layout, self)
+            self._count_filter = CountFilterObject(
+                self._layout, self, self._presets.count_presets
+            )
             self._add_filter_object(self._count_filter)
         else:
             self._count_filter = None
         if filter_types is None or FilterType.TAGS in filter_types:
-            self._tags_filter = TagFilterObject(self._layout, self)
+            self._tags_filter = TagFilterObject(
+                self._layout, self, self._presets.tags_presets
+            )
             self._add_filter_object(self._tags_filter)
         else:
             self._tags_filter = None
@@ -539,7 +866,6 @@ class FilterView(QGroupBox):
 
     def export_data(self):
         return FilterViewData(
-            1,
             self._size_filter.export_data() if self._size_filter is not None else None,
             self._count_filter.export_data()
             if self._count_filter is not None

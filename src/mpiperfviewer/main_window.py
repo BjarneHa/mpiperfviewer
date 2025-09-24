@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBo
 from serde.msgpack import from_msgpack, to_msgpack
 
 from mpiperfviewer.application_window import ApplicationWindow
+from mpiperfviewer.filter_widgets import FilterPresets
 from mpiperfviewer.plot_view import ProjectData
 from mpiperfviewer.project_state import (
     project_saved,
@@ -33,7 +34,9 @@ class MainWindow(QMainWindow):
             source_dir = Path(args[0])
         if len(args) > 1:
             component = args[1]
-        app_window = ApplicationWindow(ProjectData(source_dir, component, [], []))
+        app_window = ApplicationWindow(
+            ProjectData(source_dir, component, [], [], FilterPresets())
+        )
         self.setCentralWidget(app_window)
         menu_bar = self.menuBar()
         project_menu = menu_bar.addMenu("Project")

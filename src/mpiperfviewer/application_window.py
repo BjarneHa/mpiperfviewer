@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from mpiperfviewer.create_views import CreateMatrixView, CreateRankView
+from mpiperfviewer.filter_widgets import FilterPresets
 from mpiperfviewer.plot_view import PlotViewer, ProjectData
 from mpiperfviewer.statistics_view import StatisticsView
 
@@ -28,7 +29,7 @@ class ApplicationWindow(QWidget):
     def __init__(self, project_data: ProjectData | None = None):
         super().__init__()
         if project_data is None:
-            project_data = ProjectData(None, None, [], [])
+            project_data = ProjectData(None, None, [], [], FilterPresets())
         if project_data.source_directory is None:
             project_data.source_directory = self._get_directory_from_dialog()
 
@@ -86,4 +87,5 @@ class ApplicationWindow(QWidget):
             self.project_data.component,
             self.plot_viewer.export_tab_plots(),
             self.plot_viewer.export_detached_plots(),
+            self.plot_viewer.presets,
         )
