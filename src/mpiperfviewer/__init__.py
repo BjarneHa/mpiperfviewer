@@ -15,7 +15,7 @@ def main():
     if not qapp:
         qapp = QApplication(sys.argv)
     qapp.setApplicationName("MPI Performance Analysis")
-    qapp.setApplicationVersion("0.1.0")
+    qapp.setApplicationVersion("0.2.0")
     parser = QCommandLineParser()
     _ = parser.addVersionOption()
     _ = parser.addHelpOption()
