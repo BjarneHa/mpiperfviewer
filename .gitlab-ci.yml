@@ -1,0 +1,12 @@
+image: ghcr.io/astral-sh/uv:debian
+
+stages:
+  - build
+
+build-job:
+  stage: build
+  script:
+    - uv build --all-packages --sdist
+  artifacts:
+    paths:
+      - dist/
