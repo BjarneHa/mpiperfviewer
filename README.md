@@ -1,3 +1,3 @@
 # MPI Performance Analysis
 
-Start using `uv run main.py`.
+Start using `uv run mpiperfviewer`.
