@@ -403,9 +403,11 @@ class DiscreteMultiRangeFilterData:
 class DiscreteMultiRangeFilterWidget(QWidget):
     """A filter which allows the user to enter multiple ranges and values in a comma-separated format."""
 
+    _valid_syntax: str = "Filter syntax is valid."
     _line_edit: QLineEdit
     _button: QPushButton
     _collectives: CollectivesDialog
+    _filter_status_btn: QPushButton
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -414,9 +416,16 @@ class DiscreteMultiRangeFilterWidget(QWidget):
 
         self._line_edit = QLineEdit()
         self._line_edit.setPlaceholderText("x,[y;z]")
+        _ = self._line_edit.textChanged.connect(self._filter_line_changed)
         validator = QRegularExpressionValidator(DISCRETE_MULTIRANGE_REGEXP)
         self._line_edit.setValidator(validator)
-        layout.addWidget(self._line_edit, 0, 0, 1, 2)
+        edit_layout = QHBoxLayout()
+        self._filter_status_btn = QPushButton(self, flat=True)
+        _ = self._filter_status_btn.clicked.connect(self._status_btn_clicked)
+        self._set_filter_status(ok=True)
+        layout.addLayout(edit_layout, 0, 0, 1, 2)
+        edit_layout.addWidget(self._line_edit)
+        edit_layout.addWidget(self._filter_status_btn)
 
         layout.addWidget(QLabel("Collectives:"), 1, 0, 1, 1)
 
@@ -428,6 +437,31 @@ class DiscreteMultiRangeFilterWidget(QWidget):
         self._collectives = CollectivesDialog(self)
         _ = self._collectives.checked.connect(self._collectives_checked)
         _ = self._collectives.unchecked.connect(self._collectives_unchecked)
+
+    def _set_filter_status(self, ok: bool, msg: str|None=None):
+        if ok:
+            self._filter_status_btn.setIcon(qta.icon("mdi6.check", color="green"))
+            self._filter_status_btn.setToolTip(self._valid_syntax)
+        else:
+            self._filter_status_btn.setIcon(qta.icon("mdi6.alert", color="orange"))
+            self._filter_status_btn.setToolTip(f"Error in filter syntax: {msg}")
+
+    @Slot()
+    def _status_btn_clicked(self):
+        tooltip = self._filter_status_btn.toolTip()
+        if tooltip == self._valid_syntax:
+            _ = QMessageBox.information(self, tooltip, tooltip)
+        else:
+            _ = QMessageBox.warning(self, "Error in filter syntax.", tooltip)
+
+
+    @Slot()
+    def _filter_line_changed(self):
+        try:
+            _ = DiscreteMultiRangeFilter(self._line_edit.text())
+            self._set_filter_status(ok=True)
+        except ValueError as e:
+            self._set_filter_status(ok=False, msg=str(e))
 
     @Slot()
     def edit_pressed(self):
