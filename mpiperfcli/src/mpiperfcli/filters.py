@@ -73,7 +73,7 @@ class RangeFilter(SerializedFilter):
 
     @staticmethod
     def from_str(s: str, segment: int | None = None):
-        range_match = re.match(r"^\[((?:\+|\-)?\-inf|\d+);((?:\+|\-)?inf|\d+)\]$", s)
+        range_match = re.match(r"^\[((?:\+|\-)?(?:inf|\d+));((?:\+|\-)?(?:inf|\d+))\]$", s)
         if range_match is None:
             return None
         min, max = range_match.groups()
