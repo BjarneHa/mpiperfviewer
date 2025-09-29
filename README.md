@@ -4,14 +4,17 @@
 
 To install `mpiperfcli` or `mpiperfviewer`, download the sdist packages from the [release page](https://gitlab.lrz.de/caps-dynamic-systems-research/mpiperfviewer/-/releases/).
 
-For both `mpiperfviewer` and `mpiperfcli`, download [mpiperfviewer-0.2.0.tar.gz](https://gitlab.lrz.de/caps-dynamic-systems-research/mpiperfviewer/-/jobs/11779903/artifacts/raw/dist/mpiperfviewer-0.2.0.tar.gz?inline=false) and [mpiperfviewer-0.2.0.tar.gz](https://gitlab.lrz.de/caps-dynamic-systems-research/mpiperfviewer/-/jobs/11779903/artifacts/raw/dist/mpiperfcli-0.2.0.tar.gz?inline=false), then run:
+For both `mpiperfviewer` and `mpiperfcli`, download [mpiperfviewer-0.3.0.tar.gz](
+https://gitlab.lrz.de/caps-dynamic-systems-research/mpiperfviewer/-/jobs/11790123/artifacts/raw/dist/mpiperfviewer-0.3.0.tar.gz?inline=false) and [mpiperfviewer-0.3.0.tar.gz](
+https://gitlab.lrz.de/caps-dynamic-systems-research/mpiperfviewer/-/jobs/11790123/artifacts/raw/dist/mpiperfcli-0.3.0.tar.gz?inline=false), then run:
 ```bash
-pip install --user mpiperfcli-0.2.0.tar.gz mpiperfviewer-0.2.0.tar.gz
+pip install --user mpiperfcli-0.3.0.tar.gz mpiperfviewer-0.3.0.tar.gz
 ```
 
-For just `mpiperfcli`, download [mpiperfcli-0.2.0.tar.gz](https://gitlab.lrz.de/caps-dynamic-systems-research/mpiperfviewer/-/jobs/11779903/artifacts/raw/dist/mpiperfviewer-0.2.0.tar.gz?inline=false), then run:
+For just `mpiperfcli`, download [mpiperfcli-0.3.0.tar.gz](
+https://gitlab.lrz.de/caps-dynamic-systems-research/mpiperfviewer/-/jobs/11790123/artifacts/raw/dist/mpiperfviewer-0.3.0.tar.gz?inline=false), then run:
 ```bash
-pip install --user mpiperfcli-0.2.0.tar.gz
+pip install --user mpiperfcli-0.3.0.tar.gz
 ```
 
 **NOTE:** If your system does not allow for globally installed `pip` packages, consider using `pipx` instead. Alternatively, you can just install the package in a venv.
