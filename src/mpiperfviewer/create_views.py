@@ -1,6 +1,4 @@
 import qtawesome as qta
-from mpiperfcli.parser import WorldData
-from mpiperfcli.plots import MatrixGroupBy, MatrixMetric, RankPlotMetric, RankPlotType
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtGui import QIcon, QIntValidator
 from PySide6.QtWidgets import (
@@ -13,6 +11,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QWidget,
 )
+
+from mpiperfcli.parser import ComponentData, WorldData
+from mpiperfcli.plots import MatrixGroupBy, MatrixMetric, RankPlotMetric, RankPlotType
 
 
 def rank_type_icon(type: RankPlotType, color: str | None = None) -> QIcon:
@@ -119,7 +120,7 @@ class CreateMatrixView(QGroupBox):
     _group_by_box: QComboBox
     create_tab: Signal = Signal(str, str)
 
-    def __init__(self, parent: QWidget):
+    def __init__(self, component_data: ComponentData, parent: QWidget):
         super().__init__("Create Global Communication Matrix", parent)
         layout = QGridLayout(self)
         layout.addWidget(QLabel("Metric:"), 0, 0)
@@ -130,8 +131,15 @@ class CreateMatrixView(QGroupBox):
         group_by_label = QLabel("Group by:")
         layout.addWidget(group_by_label, 1, 0)
         self._group_by_box = QComboBox(self)
-        for item in MatrixGroupBy:
-            self._group_by_box.addItem(item)
+        self._group_by_box.addItem(MatrixGroupBy.RANK)
+        if component_data.by_core is not None:
+            self._group_by_box.addItem(MatrixGroupBy.CORE)
+        if component_data.by_socket is not None:
+            self._group_by_box.addItem(MatrixGroupBy.SOCKET)
+        if component_data.by_numa is not None:
+            self._group_by_box.addItem(MatrixGroupBy.NUMA)
+        if component_data.by_node is not None:
+            self._group_by_box.addItem(MatrixGroupBy.NODE)
         layout.addWidget(self._group_by_box, 1, 1)
         create_button = QPushButton("Create")
         create_button.setIcon(qta.icon("mdi6.plus"))

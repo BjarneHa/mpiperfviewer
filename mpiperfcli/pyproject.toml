@@ -21,3 +21,9 @@ mpiperfcli = "mpiperfcli:main"
 [build-system]
 requires = ["uv_build>=0.8.16,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.pyright]
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportMissingTypeStubs = false
+reportAny = false

@@ -14,6 +14,7 @@ from mpiperfcli.parser import ComponentData, UInt64Array, WorldMeta
 
 class MatrixGroupBy(StrEnum):
     RANK = "Rank"
+    CORE = "Core"
     NUMA = "NUMA Node"
     SOCKET = "Socket"
     NODE = "Node"
@@ -124,6 +125,8 @@ class MatrixPlotBase(PlotBase, ABC):
         match self._group_by:
             case MatrixGroupBy.RANK:
                 group = self.component_data.by_rank
+            case MatrixGroupBy.CORE:
+                group = self.component_data.by_core
             case MatrixGroupBy.NUMA:
                 group = self.component_data.by_numa
             case MatrixGroupBy.SOCKET:

@@ -2,7 +2,6 @@ from pathlib import Path
 from tomllib import TOMLDecodeError
 from typing import final
 
-from mpiperfcli.parser import WorldData
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -12,6 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mpiperfcli.parser import WorldData
 from mpiperfviewer.create_views import CreateMatrixView, CreateRankView
 from mpiperfviewer.filter_widgets import FilterPresets
 from mpiperfviewer.plot_view import PlotViewer, ProjectData
@@ -66,7 +66,8 @@ class ApplicationWindow(QWidget):
         self.statistics_view = StatisticsView(
             self.world_data, project_data.component, self
         )
-        self.create_matrix_view = CreateMatrixView(self)
+        component_data = self.world_data.components[project_data.component]
+        self.create_matrix_view = CreateMatrixView(component_data, self)
         self.create_rank_view = CreateRankView(self.world_data, self)
         self._left_col.addWidget(self.statistics_view)
         self._left_col.addWidget(self.create_matrix_view)

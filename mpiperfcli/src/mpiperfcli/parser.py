@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -8,43 +9,77 @@ from serde import deserialize, field, from_dict
 from serde.toml import from_toml
 
 
+class LocalityType(StrEnum):
+    CORE = "hwcore"
+    SOCKET = "socket" # TODO correct?
+    NUMA = "NUMA"
+    NODE = "node"
+
+def deserialize_peers(peers: list[Any]):
+    out = list[int]()
+    def add_peer(peer: int):
+        if peer < 0:
+            raise ValueError(f"Peer \"{peer}\" invalid.")
+        out.append(peer)
+    for peer in peers:
+        if isinstance(peer, str):
+            match peer.split("-", 1):
+                case start, end:
+                    start = int(start)
+                    end = int(end)
+                    if start > end or start < 0:
+                        raise ValueError(f"Peer range \"{peer}\" invalid.")
+                    out += list(range(int(start), int(end)+1))
+                case peer,:
+                    peer = int(peer)
+                    add_peer(peer)
+                case _:
+                    raise ValueError(f"Peer \"{peer}\" invalid.")
+        elif isinstance(peer, int):
+            add_peer(peer)
+        else:
+            raise ValueError(f"Peer \"{peer}\" invalid.")
+    return out
+
+
 @dataclass
-class RankGeneric:
+class RankLocality:
+    type: LocalityType = field(rename="locality")
+    peers: list[int] = field(deserializer=deserialize_peers)
+
+
+@dataclass
+class RankGeneral:
     own_rank: int
     num_procs: int
     wall_time: int
     hostname: str
-    mpi_version: str
+    mpi_runtime: str
+    localities: list[RankLocality]
 
-
-def deserialize_sent_sizes(
-    x: dict[str, dict[str, list[tuple[int, int]]]],
-) -> dict[str, dict[str, dict[int, int]]]:
-    return {
-        type: {
-            comp: {size: occurances for size, occurances in tuples}
-            for comp, tuples in comps.items()
-        }
-        for type, comps in x.items()
-    }
 
 
 def deserialize_sent_tags(
-    x: dict[str, list[tuple[int, int]]],
-) -> dict[str, dict[int, int]]:
-    return {comp: {tag: occ for tag, occ in v} for comp, v in x.items()}
+    tags: list[tuple[int, int]],
+) -> dict[int, int]:
+    return {tag: occ for tag, occ in tags}
+
+@deserialize
+class CallsiteMessagesSizeEntry:
+    size: int
+    tags: dict[int, int] = field(deserializer=deserialize_sent_tags)
 
 
 @deserialize
-class RankPeer:
-    locality: str
-    sent_count: dict[str, int]
-    sent_tags: dict[str, dict[int, int]] = field(deserializer=deserialize_sent_tags)
-    sent_sizes: dict[str, dict[str, dict[int, int]]] = field(
-        deserializer=deserialize_sent_sizes
-    )
-    components: list[str] = field(deserializer=lambda x: x.split(","))  # TODO remove
+class CallsiteMessageData:
+    callsite: int
+    msgs: list[CallsiteMessagesSizeEntry]
 
+@deserialize
+class RankPeer:
+    components: list[str]
+    sent_count: dict[str, int]
+    sent_messages: dict[str, list[CallsiteMessageData]]
 
 def cast_dict_keys_to_int(x: dict[str, Any]):
     return {int(k): from_dict(RankPeer, v) for k, v in x.items()}
@@ -52,7 +87,7 @@ def cast_dict_keys_to_int(x: dict[str, Any]):
 
 @deserialize
 class RankFile:
-    general: RankGeneric
+    general: RankGeneral
     peers: dict[int, RankPeer] = field(
         rename="peer",
         deserializer=cast_dict_keys_to_int,
@@ -68,7 +103,7 @@ type Component = str
 class WorldMeta:
     num_nodes: int
     num_processes: int
-    mpi_version: str
+    mpi_runtime: str
     version: tuple[int, int, int]
     source_directory: Path
     components: frozenset[Component] = frozenset()
@@ -103,26 +138,24 @@ class GroupedMatrices:
         count = np.zeros((n, n), dtype=np.uint64).view()
         return cls(sizes, tags, count)
 
-    def regroup(self, group_size: int):
-        if group_size == 0:
+    def regroup(self, localities: list[list[int]]|None):
+        if localities is None:
             return None
-
-        slice_size = self.sizes.shape[0] // group_size
-        new_sizes = self.sizes.reshape(
-            slice_size, group_size, slice_size, group_size, self.sizes.shape[2]
-        ).sum((1, 3))
-        new_tags = self.tags.reshape(
-            slice_size, group_size, slice_size, group_size, self.tags.shape[2]
-        ).sum((1, 3))
-        new_count = self.count.reshape(
-            slice_size, group_size, slice_size, group_size
-        ).sum((1, 3))
-        return GroupedMatrices(new_sizes, new_tags, new_count)
-
+        num_localities = len(localities)
+        gm = GroupedMatrices.create_empty(num_localities, self.tags.shape[2], self.sizes.shape[2])
+        for sender_locality, sender_ranks in enumerate(localities):
+            for recipient_locality, recipient_ranks in enumerate(localities):
+                for sender in sender_ranks:
+                    for recipient in recipient_ranks:
+                        gm.sizes[sender_locality, recipient_locality, :] += self.sizes[sender, recipient, :]
+                        gm.tags[sender_locality, recipient_locality, :] += self.tags[sender, recipient, :]
+                        gm.count[sender_locality, recipient_locality] += self.count[sender, recipient]
+        return gm
 
 class ComponentData:
     name: str
     by_rank: GroupedMatrices
+    by_core: GroupedMatrices | None = None
     by_numa: GroupedMatrices | None = None
     by_socket: GroupedMatrices | None = None
     by_node: GroupedMatrices | None = None
@@ -151,22 +184,6 @@ class ComponentData:
         self.total_bytes_sent = 0
         self.total_msgs_sent = 0
 
-    def group_by_numa(self, ranks_per_numa: int):
-        if self.by_rank.sizes.shape[0] % ranks_per_numa != 0:
-            raise Exception("Invalid NUMA grouping. Check data.")
-        self.by_numa = self.by_rank.regroup(ranks_per_numa)
-
-    def group_by_socket(self, ranks_per_socket: int):
-        if self.by_rank.sizes.shape[0] % ranks_per_socket != 0:
-            raise Exception("Invalid socket grouping. Check data.")
-        self.by_socket = self.by_rank.regroup(ranks_per_socket)
-
-    def group_by_node(self, ranks_per_node: int):
-        if self.by_rank.sizes.shape[0] % ranks_per_node != 0:
-            raise Exception("Invalid node grouping. Check data.")
-        self.by_node = self.by_rank.regroup(ranks_per_node)
-
-
 class WorldData:
     meta: WorldMeta
     components: dict[Component, ComponentData]
@@ -183,7 +200,7 @@ class WorldData:
             rf0 = from_toml(RankFile, f.read())
             self.meta = WorldMeta(
                 num_processes=rf0.general.num_procs,
-                mpi_version=rf0.general.mpi_version,
+                mpi_runtime=rf0.general.mpi_runtime,
                 version=(0, 0, 0),
                 num_nodes=0,
                 source_directory=world_path,
@@ -197,29 +214,30 @@ class WorldData:
 
         for i in range(self.meta.num_processes):
             with open(world_path / rankfile_name(i), "r") as f:
-                sender = from_toml(RankFile, f.read())
-                hostnames.add(sender.general.hostname)
-                rank_files.append(sender)
-                wall_time = max(wall_time, sender.general.wall_time)
+                sender_rf = from_toml(RankFile, f.read())
+                hostnames.add(sender_rf.general.hostname)
+                rank_files.append(sender_rf)
+                wall_time = max(wall_time, sender_rf.general.wall_time)
+                assert sender_rf.general.own_rank == i
 
         self.wall_time = timedelta(microseconds=wall_time // 1000)
         component_set = set[Component]()
 
-        for sender in rank_files:
-            for peer in sender.peers.values():
+        for sender_rf in rank_files:
+            for peer in sender_rf.peers.values():
                 component_set.update(peer.components)
 
         self.meta.components = frozenset(component_set)
 
         occuring_sizes = {c: set[int]() for c in self.meta.components}
         occuring_tags = {c: set[int]() for c in self.meta.components}
-        for sender in rank_files:
-            for peer in sender.peers.values():
-                for comp in self.meta.components:
-                    occuring_sizes[comp].update(
-                        peer.sent_sizes.get("exact", {}).get(comp, {}).keys()
-                    )
-                    occuring_tags[comp].update(peer.sent_tags.get(comp, {}).keys())
+        for sender_rf in rank_files:
+            for peer in sender_rf.peers.values():
+                for comp, callsites in peer.sent_messages.items():
+                    for callsite in callsites:
+                        for msg in callsite.msgs:
+                            occuring_sizes[comp].add(msg.size)
+                            occuring_tags[comp].update(msg.tags.keys())
 
         self.meta.num_nodes = len(hostnames)
 
@@ -236,6 +254,11 @@ class WorldData:
             cd = ComponentData(c, cd_occuring_sizes, cd_occuring_tags, n)
             self.components[c] = cd
 
+        node_locality = self._get_localities_from_rfs(rank_files, LocalityType.NODE)
+        numa_locality = self._get_localities_from_rfs(rank_files, LocalityType.NUMA)
+        socket_locality = self._get_localities_from_rfs(rank_files, LocalityType.SOCKET)
+        core_locality = self._get_localities_from_rfs(rank_files, LocalityType.CORE)
+
         for comp_n in self.meta.components:
             # Map from a given size/tag to its index in the relevant numpy array in self.rank_sizes/self.rank_tags respectively
             comp = self.components[comp_n]
@@ -246,25 +269,58 @@ class WorldData:
                 int(value): index for index, value in enumerate(comp.occuring_sizes)
             }
 
-            for sender in rank_files:
-                from_rank = sender.general.own_rank
-                if sender.general.own_rank >= n:
-                    raise ValueError(f"Invalid own_rank {from_rank}>=num_proc.")
+            for sender_rf in rank_files:
+                sender = sender_rf.general.own_rank
+                if sender_rf.general.own_rank >= n:
+                    raise ValueError(f"Invalid own_rank {sender}>=num_proc.")
 
-                for receiver, peer in sender.peers.items():
-                    if receiver >= n:
+                for recipient, peer in sender_rf.peers.items():
+                    if recipient >= n:
                         raise ValueError(
-                            f"Invalid peer {receiver}>=num_proc for rank {from_rank}."
+                            f"Invalid peer {recipient}>=num_proc for rank {sender}."
                         )
-                    for size, occurances in (
-                        peer.sent_sizes.get("exact", {}).get(comp_n, {}).items()
-                    ):
-                        size_index = sizes_index_map[size]
-                        comp.by_rank.sizes[from_rank, receiver, size_index] = occurances
-                        comp.total_bytes_sent += size * occurances
-                    for tags, occurances in peer.sent_tags.get(comp_n, {}).items():
-                        tag_index = tags_index_map[tags]
-                        comp.by_rank.tags[from_rank, receiver, tag_index] = occurances
-                    comp.by_rank.count[from_rank, receiver] = peer.sent_count[comp_n]
+                    for callsite in peer.sent_messages.get(comp_n, []):
+                        for msg in callsite.msgs:
+                            msgs_sent_for_size = 0
+                            for tag, msgs_sent in msg.tags.items():
+                                tag_index = tags_index_map[tag]
+                                comp.by_rank.tags[sender, recipient, tag_index] += msgs_sent
+                                msgs_sent_for_size += msgs_sent
+
+                            size_index = sizes_index_map[msg.size]
+                            comp.by_rank.sizes[sender, recipient, size_index] += msgs_sent_for_size
+                            comp.total_bytes_sent += msg.size * msgs_sent_for_size
                     comp.total_msgs_sent += peer.sent_count[comp_n]
-            comp.group_by_node(self.meta.num_processes // self.meta.num_nodes)
+                    comp.by_rank.count[sender, recipient] = peer.sent_count[comp_n]
+            comp.by_numa = comp.by_rank.regroup(numa_locality)
+            comp.by_socket = comp.by_rank.regroup(socket_locality)
+            comp.by_node = comp.by_rank.regroup(node_locality)
+            comp.by_core = comp.by_rank.regroup(core_locality)
+
+    def _get_locality_from_rf(self, rf: RankFile, type: LocalityType):
+        found = None
+        for locality in rf.general.localities:
+            if locality.type == type:
+                if found is None:
+                    found = locality
+                else:
+                    raise Exception(f"Locality type \"{type}\" found multiple times in rank file for rank {rf.general.own_rank}.")
+        return found
+
+    def _get_localities_from_rfs(self, rfs: list[RankFile], type: LocalityType):
+        localities = list[list[int]]()
+        ranks_covered = [False for _ in rfs]
+        for i, rf in enumerate(rfs):
+            if ranks_covered[i]:
+                continue
+            found = self._get_locality_from_rf(rf, type)
+            if found is None:
+                return None
+            for other_rank in found.peers:
+                found_other_rank = self._get_locality_from_rf(rfs[other_rank], type)
+                if found_other_rank is None or found.peers != found_other_rank.peers:
+                    raise Exception(f"Locality \"{type}\" differs in rank files for rank {i} and {other_rank}.")
+                ranks_covered[other_rank] = True
+            ranks_covered[i] = True
+            localities.append(found.peers)
+        return sorted(localities)
