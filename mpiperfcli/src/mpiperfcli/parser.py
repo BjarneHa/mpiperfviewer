@@ -3,6 +3,7 @@ from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+from weakref import WeakValueDictionary
 
 import numpy as np
 from serde import deserialize, field, from_dict
@@ -114,43 +115,95 @@ def rankfile_name(i: int):
 
 
 class GroupedMatrices:
-    # sizes[sender, receiver, size_index] = occurances
-    sizes: UInt64Array[tuple[int, int, int]]
-    # tags[sender, receiver, tag_index] = occurances
-    tags: UInt64Array[tuple[int, int, int]]
     # count[sender, receiver] = occurances
-    count: UInt64Array[tuple[int, int]]
+    msgs_sent: UInt64Array[tuple[int, int]]
+    # total[sender, receiver] = occurances
+    total_sent: UInt64Array[tuple[int, int]]
 
     def __init__(
         self,
-        sizes: UInt64Array[tuple[int, int, int]],
-        tags: UInt64Array[tuple[int, int, int]],
         count: UInt64Array[tuple[int, int]],
+        total: UInt64Array[tuple[int, int]],
     ):
-        self.sizes = sizes
-        self.tags = tags
-        self.count = count
+        self.msgs_sent = count
+        self.total_sent = total
 
     @classmethod
-    def create_empty(cls, n: int, num_tags: int, num_sizes: int):
-        sizes = np.zeros((n, n, num_sizes), dtype=np.uint64).view()
-        tags = np.zeros((n, n, num_tags), dtype=np.uint64).view()
+    def create_empty(cls, n: int):
         count = np.zeros((n, n), dtype=np.uint64).view()
-        return cls(sizes, tags, count)
+        total = np.zeros((n, n), dtype=np.uint64).view()
+        return cls(count, total)
 
     def regroup(self, localities: list[list[int]]|None):
         if localities is None:
             return None
         num_localities = len(localities)
-        gm = GroupedMatrices.create_empty(num_localities, self.tags.shape[2], self.sizes.shape[2])
+        gm = GroupedMatrices.create_empty(num_localities)
         for sender_locality, sender_ranks in enumerate(localities):
             for recipient_locality, recipient_ranks in enumerate(localities):
                 for sender in sender_ranks:
                     for recipient in recipient_ranks:
-                        gm.sizes[sender_locality, recipient_locality, :] += self.sizes[sender, recipient, :]
-                        gm.tags[sender_locality, recipient_locality, :] += self.tags[sender, recipient, :]
-                        gm.count[sender_locality, recipient_locality] += self.count[sender, recipient]
+                        gm.msgs_sent[sender_locality, recipient_locality] += self.msgs_sent[sender, recipient]
+                        gm.total_sent[sender_locality, recipient_locality] += self.total_sent[sender, recipient]
         return gm
+
+@dataclass
+class SizeData:
+    rank: int
+    occuring_sizes: UInt64Array[tuple[int]]
+    data: UInt64Array[tuple[int, int]]
+
+    @staticmethod
+    def from_rf(sender_rf: RankFile, component_name: Component):
+        occuring_sizes_set = set[int]()
+        for recipient, peer in sender_rf.peers.items():
+            if recipient >= sender_rf.general.num_procs:
+                raise ValueError(
+                    f"Invalid peer {recipient}>=num_proc for rank {sender_rf.general.own_rank}."
+                )
+            for callsite in peer.sent_messages.get(component_name, []):
+                for msg in callsite.msgs:
+                    occuring_sizes_set.add(msg.size)
+        occuring_sizes = np.array(list(occuring_sizes_set)).ravel() # ravel is only relevant for type hints
+        occuring_sizes.sort()
+        size_to_idx_map = {size: i for i, size in enumerate(occuring_sizes)}
+        data = np.zeros((sender_rf.general.num_procs, len(occuring_sizes)), np.uint64)
+        for recipient, peer in sender_rf.peers.items():
+            for callsite in peer.sent_messages.get(component_name, []):
+                for msg in callsite.msgs:
+                    size_index = size_to_idx_map[msg.size]
+                    data[recipient, size_index] += sum(msg.tags.values())
+        return SizeData(sender_rf.general.own_rank, occuring_sizes, data)
+
+@dataclass
+class TagData:
+    rank: int
+    occuring_tags: UInt64Array[tuple[int]]
+    data: UInt64Array[tuple[int, int]]
+
+    @staticmethod
+    def from_rf(sender_rf: RankFile, component_name: Component):
+        occuring_tags_set = set[int]()
+        for recipient, peer in sender_rf.peers.items():
+            if recipient >= sender_rf.general.num_procs:
+                raise ValueError(
+                    f"Invalid peer {recipient}>=num_proc for rank {sender_rf.general.own_rank}."
+                )
+            for callsite in peer.sent_messages.get(component_name, []):
+                for msg in callsite.msgs:
+                    occuring_tags_set.update(msg.tags.keys())
+        occuring_tags = np.array(list(occuring_tags_set)).ravel() # ravel is only relevant for type hints
+        occuring_tags.sort()
+        tags_to_idx_map = {tag: i for i, tag in enumerate(occuring_tags)}
+        data = np.zeros((sender_rf.general.num_procs, len(occuring_tags)), np.uint64)
+        for recipient, peer in sender_rf.peers.items():
+            for callsite in peer.sent_messages.get(component_name, []):
+                for msg in callsite.msgs:
+                    for tag, occurances in msg.tags.items():
+                        tag_index = tags_to_idx_map[tag]
+                        data[recipient, tag_index] += occurances
+        return TagData(sender_rf.general.own_rank, occuring_tags, data)
+
 
 class ComponentData:
     name: str
@@ -159,30 +212,47 @@ class ComponentData:
     by_numa: GroupedMatrices | None = None
     by_socket: GroupedMatrices | None = None
     by_node: GroupedMatrices | None = None
-    # occuring_sizes[size_index] = size
-    occuring_sizes: UInt64Array[tuple[int]]
-    # occuring_sizes[tag_index] = tag
-    occuring_tags: Int64Array[tuple[int]]
     total_bytes_sent: int
     total_msgs_sent: int
+    _size_data_list: WeakValueDictionary[int, SizeData]
+    _tags_data_list: WeakValueDictionary[int, TagData]
+    _world_data: "WorldData"
 
     def __init__(
         self,
         name: str,
-        occuring_sizes: UInt64Array[tuple[int]],
-        occuring_tags: Int64Array[tuple[int]],
         num_processes: int,
+        world_data: "WorldData",
     ):
         self.name = name
+        self._world_data = world_data
+        self._size_data_list = WeakValueDictionary()
+        self._tags_data_list = WeakValueDictionary()
         n = num_processes
-        self.occuring_sizes = occuring_sizes
-        self.occuring_tags = occuring_tags
 
-        self.by_rank = GroupedMatrices.create_empty(
-            n, occuring_tags.size, occuring_sizes.size
-        )
+        self.by_rank = GroupedMatrices.create_empty(n)
         self.total_bytes_sent = 0
         self.total_msgs_sent = 0
+
+    def tags(self, rank: int):
+        lazy_data = self._tags_data_list.get(rank)
+        if lazy_data is not None:
+            return lazy_data
+        with self._world_data.open_rank(rank) as f:
+            sender_rf = from_toml(RankFile, f.read())
+            data = TagData.from_rf(sender_rf, self.name)
+            self._tags_data_list[rank] = data
+            return data
+
+    def sizes(self, rank: int):
+         lazy_data = self._size_data_list.get(rank)
+         if lazy_data is not None:
+             return lazy_data
+         with self._world_data.open_rank(rank) as f:
+             sender_rf = from_toml(RankFile, f.read())
+             data = SizeData.from_rf(sender_rf, self.name)
+             self._size_data_list[rank] = data
+             return data
 
 class WorldData:
     meta: WorldMeta
@@ -191,7 +261,10 @@ class WorldData:
 
     def __init__(self, world_path: Path):
         self.parse_metadata(world_path)
-        self.parse_ranks(world_path)
+        self.parse_ranks()
+
+    def open_rank(self, rank: int):
+        return open(self.meta.source_directory / rankfile_name(rank), "r")
 
     # TODO this will hopefully be done differently in the future
     def parse_metadata(self, world_path: Path):
@@ -206,48 +279,33 @@ class WorldData:
                 source_directory=world_path,
             )
 
-    def parse_ranks(self, world_path: Path):
+    def parse_ranks(self):
         """Read data from rank files into multi-dimensional numpy arrays, which can then be used for plotting."""
         hostnames = set[str]()
         wall_time = 0
 
-        occuring_sizes = dict[Component, set[int]]()
-        occuring_tags = dict[Component, set[int]]()
+        component_set = set[Component]()
         unparsed_localities = list[list[RankLocality]]()
 
         for rank in range(self.meta.num_processes):
-            with open(world_path / rankfile_name(rank), "r") as f:
+            with self.open_rank(rank) as f:
                 sender_rf = from_toml(RankFile, f.read())
                 hostnames.add(sender_rf.general.hostname)
                 wall_time = max(wall_time, sender_rf.general.wall_time)
                 unparsed_localities.append(sender_rf.general.localities)
                 for peer in sender_rf.peers.values():
-                    for comp, callsites in peer.sent_messages.items():
-                        if comp not in occuring_sizes.keys(): # since both always have the same keys, one check is sufficient
-                            occuring_sizes[comp] = set()
-                            occuring_tags[comp] = set()
-                        for callsite in callsites:
-                            for msg in callsite.msgs:
-                                occuring_sizes[comp].add(msg.size)
-                                occuring_tags[comp].update(msg.tags.keys())
+                    component_set.update(peer.sent_count.keys())
+                    component_set.update(peer.sent_messages.keys())
                 assert sender_rf.general.own_rank == rank
 
-
         self.wall_time = timedelta(microseconds=wall_time // 1000)
-        self.meta.components = frozenset(occuring_sizes.keys())
+        self.meta.components = frozenset(component_set)
         self.meta.num_nodes = len(hostnames)
 
         n = self.meta.num_processes
         self.components = {}
         for c in self.meta.components:
-            # .view() and .ravel() do not change/copy the array and are only necessary for typing
-            cd_occuring_sizes = (
-                np.array(sorted(occuring_sizes[c]), dtype=np.uint64).view().ravel()
-            )
-            cd_occuring_tags = (
-                np.array(sorted(occuring_tags[c]), dtype=np.int64).view().ravel()
-            )
-            cd = ComponentData(c, cd_occuring_sizes, cd_occuring_tags, n)
+            cd = ComponentData(c, n, self)
             self.components[c] = cd
 
         node_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.NODE)
@@ -255,19 +313,8 @@ class WorldData:
         socket_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.SOCKET)
         core_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.CORE)
 
-        # Map from a component and given size/tag to its index in the relevant numpy array in self.rank_sizes/self.rank_tags respectively
-        tags_index_map = {
-            comp_n: {int(value): index
-                for index, value in enumerate(self.components[comp_n].occuring_tags)}
-            for comp_n in self.meta.components
-        }
-        sizes_index_map = {
-            comp_n: {int(value): index for index, value in enumerate(self.components[comp_n].occuring_sizes)}
-            for comp_n in self.meta.components
-        }
-
         for rank in range(self.meta.num_processes):
-            with open(world_path / rankfile_name(rank), "r") as f:
+            with self.open_rank(rank) as f:
                 sender_rf = from_toml(RankFile, f.read())
 
                 for comp_n in self.meta.components:
@@ -283,17 +330,11 @@ class WorldData:
                             )
                         for callsite in peer.sent_messages.get(comp_n, []):
                             for msg in callsite.msgs:
-                                msgs_sent_for_size = 0
-                                for tag, msgs_sent in msg.tags.items():
-                                    tag_index = tags_index_map[comp_n][tag]
-                                    comp.by_rank.tags[sender, recipient, tag_index] += msgs_sent
-                                    msgs_sent_for_size += msgs_sent
-
-                                size_index = sizes_index_map[comp_n][msg.size]
-                                comp.by_rank.sizes[sender, recipient, size_index] += msgs_sent_for_size
-                                comp.total_bytes_sent += msg.size * msgs_sent_for_size
+                                for msgs_sent in msg.tags.values():
+                                    comp.total_bytes_sent += msgs_sent * msg.size
+                                    comp.by_rank.total_sent[sender, recipient] += msgs_sent * msg.size
                         comp.total_msgs_sent += peer.sent_count[comp_n]
-                        comp.by_rank.count[sender, recipient] = peer.sent_count[comp_n]
+                        comp.by_rank.msgs_sent[sender, recipient] = peer.sent_count[comp_n]
 
         for comp in self.components.values():
             comp.by_numa = comp.by_rank.regroup(numa_locality)

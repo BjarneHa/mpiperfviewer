@@ -24,7 +24,7 @@ from mpiperfcli.plots import (
     TagsPixelPlot,
 )
 from PySide6.QtCore import Signal, Slot
-from PySide6.QtGui import QCloseEvent, QFont, QGuiApplication, QIcon
+from PySide6.QtGui import QCloseEvent, QFont, QGuiApplication, QIcon, Qt
 from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
@@ -79,6 +79,7 @@ class PlotWidget(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         plot_box = QGroupBox("Plot", self)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.canvas = FigureCanvasQTAgg()
         self.plot = plot_factory(self.canvas.figure)
         self.icon = get_icon_for_plot(self.plot)
@@ -310,7 +311,9 @@ class PlotViewer(QGroupBox):
     @Slot()
     def close_tab(self, index: int):
         project_updated()
+        item = self._tab_widget.widget(index)
         self._tab_widget.removeTab(index)
+        item.deleteLater()
 
     @Slot()
     def plotwidget_closed(self):

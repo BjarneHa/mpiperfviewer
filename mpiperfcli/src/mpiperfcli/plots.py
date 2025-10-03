@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
 from mpiperfcli.filters import Filter, FilterState, FilterType, RangeFilter
-from mpiperfcli.parser import ComponentData, UInt64Array, WorldMeta
+from mpiperfcli.parser import ComponentData, SizeData, TagData, UInt64Array, WorldMeta
 
 
 class MatrixGroupBy(StrEnum):
@@ -101,7 +101,7 @@ class MatrixPlotBase(PlotBase, ABC):
         self, matrix: UInt64Array[tuple[int, int]], separators: list[int] | None = None
     ):
         separators = separators or []
-        peers = list(range(self.group.count.shape[0]))
+        peers = list(range(self.group.msgs_sent.shape[0]))
         ax = self.fig.add_subplot()
         ticks = np.arange(0, len(matrix))
 
@@ -166,15 +166,7 @@ class SizeMatrixPlot(MatrixPlotBase):
 
     @override
     def init_plot(self, filters: FilterState):
-        matrix_dims = self.group.sizes.shape[:2]
-        matrix = np.zeros(matrix_dims, dtype=np.uint64).view()
-        for sender in range(matrix_dims[0]):
-            for receiver in range(matrix_dims[1]):
-                for i, size in enumerate(self.component_data.occuring_sizes):
-                    matrix[sender, receiver] += (
-                        size * self.group.sizes[sender, receiver, i]
-                    )
-        self.plot_matrix(matrix)
+        self.plot_matrix(self.group.total_sent)
 
     @override
     @classmethod
@@ -208,7 +200,7 @@ class CountMatrixPlot(MatrixPlotBase):
 
     @override
     def init_plot(self, filters: FilterState):
-        self.plot_matrix(self.group.count)
+        self.plot_matrix(self.group.msgs_sent)
 
     @override
     @classmethod
@@ -250,18 +242,16 @@ class ThreeDimPlotBase(RankPlotBase, ABC):
     def generate_3d_data(
         self,
         metrics_legend: NDArray[Any],
-        metrics_data: UInt64Array[tuple[int, int, int]],
+        data: UInt64Array[tuple[int, int]],
         legend_filter: Filter,
         count_filter: Filter,
     ):
-        occurances = metrics_data[self._rank, :, :]
-
         # Apply range filter to tags
         metric = metrics_legend
         metric_filter_array = legend_filter.apply(metric)
         metric = metric[metric_filter_array]
 
-        occurances = occurances[:, metric_filter_array]
+        occurances = data[:, metric_filter_array]
 
         # `.sum(DIM, dtype=np.bool)` is equivalent to an OR-Operation and
         # is used to filter out irrelevant rows and columns in the graph
@@ -271,7 +261,7 @@ class ThreeDimPlotBase(RankPlotBase, ABC):
         # Applies count filter (after size/tags filter, perhaps this should be changable)
         procs = np.arange(0, self.world_meta.num_processes, dtype=np.uint64)
         procs_count_filter_array = (
-            self.component_data.by_rank.count[self._rank, :] > 0
+            self.component_data.by_rank.msgs_sent[self._rank, :] > 0
         ) & (filtered_occurances.sum(1, dtype=np.bool))
         metric_count_filter_array = filtered_occurances.sum(0, dtype=np.bool)
         procs = procs[procs_count_filter_array]
@@ -308,6 +298,12 @@ class ThreeDimBarBase(ThreeDimPlotBase, ABC):
 
 
 class TagsBar3DPlot(ThreeDimBarBase):
+    _data: TagData
+
+    def __init__(self, fig: Figure, meta: WorldMeta, component_data: ComponentData, rank: int):
+        super().__init__(fig, meta, component_data, rank)
+        self._data = self.component_data.tags(self._rank)
+
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -321,10 +317,10 @@ class TagsBar3DPlot(ThreeDimBarBase):
     @override
     def init_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
-        component_data = self.component_data
+
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
-            component_data.occuring_tags,
-            component_data.by_rank.tags,
+            self._data.occuring_tags,
+            self._data.data,
             filters.tags,
             filters.count,
         )
@@ -351,6 +347,12 @@ class TagsBar3DPlot(ThreeDimBarBase):
 
 
 class SizeBar3DPlot(ThreeDimBarBase):
+    _data: SizeData
+
+    def __init__(self, fig: Figure, meta: WorldMeta, component_data: ComponentData, rank: int):
+        super().__init__(fig, meta, component_data, rank)
+        self._data = self.component_data.sizes(rank)
+
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -365,8 +367,8 @@ class SizeBar3DPlot(ThreeDimBarBase):
     def init_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
-            self.component_data.occuring_sizes,
-            self.component_data.by_rank.sizes,
+            self._data.occuring_sizes,
+            self._data.data,
             filters.size,
             filters.count,
         )
@@ -407,7 +409,7 @@ class Counts2DBarPlot(RankPlotBase):
     def init_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         x = np.arange(0, self.world_meta.num_processes)
-        y = self.component_data.by_rank.count[self._rank, :]
+        y = self.component_data.by_rank.msgs_sent[self._rank, :]
         count_filter = filters.count.apply(y)
         x = x[count_filter]
         y = y[count_filter]
@@ -431,6 +433,12 @@ class Counts2DBarPlot(RankPlotBase):
 
 
 class TagsPixelPlot(PixelPlotBase):
+    _data: TagData
+
+    def __init__(self, fig: Figure, meta: WorldMeta, component_data: ComponentData, rank: int):
+        super().__init__(fig, meta, component_data, rank)
+        self._data = self.component_data.tags(self._rank)
+
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -445,8 +453,8 @@ class TagsPixelPlot(PixelPlotBase):
     def init_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
-            self.component_data.occuring_tags,
-            self.component_data.by_rank.tags,
+            self._data.occuring_tags,
+            self._data.data,
             filters.tags,
             filters.count,
         )
@@ -472,6 +480,12 @@ class TagsPixelPlot(PixelPlotBase):
 
 
 class SizePixelPlot(PixelPlotBase):
+    _data: SizeData
+
+    def __init__(self, fig: Figure, meta: WorldMeta, component_data: ComponentData, rank: int):
+        super().__init__(fig, meta, component_data, rank)
+        self._data = self.component_data.sizes(rank)
+
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
@@ -486,8 +500,8 @@ class SizePixelPlot(PixelPlotBase):
     def init_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
-            self.component_data.occuring_sizes,
-            self.component_data.by_rank.sizes,
+            self._data.occuring_sizes,
+            self._data.data,
             filters.size,
             filters.count,
         )
