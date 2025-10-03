@@ -113,52 +113,51 @@ def rankfile_name(i: int):
     return f"pc_data_{i}.toml"
 
 
-class GroupedMatrices:
-    # sizes[sender, receiver, size_index] = occurances
-    sizes: UInt64Array[tuple[int, int, int]]
-    # tags[sender, receiver, tag_index] = occurances
-    tags: UInt64Array[tuple[int, int, int]]
-    # count[sender, receiver] = occurances
-    count: UInt64Array[tuple[int, int]]
+class LocalityMatrix:
+    # count[sender, receiver, size_idx, tag_idx] = occurances
+    array: UInt64Array[tuple[int, int, int, int]]
 
     def __init__(
         self,
-        sizes: UInt64Array[tuple[int, int, int]],
-        tags: UInt64Array[tuple[int, int, int]],
-        count: UInt64Array[tuple[int, int]],
+        array: UInt64Array[tuple[int, int, int, int]],
     ):
-        self.sizes = sizes
-        self.tags = tags
-        self.count = count
+        self.array = array
+        print("Size:", array.nbytes)
+        print("Shape:", array.shape)
 
     @classmethod
     def create_empty(cls, n: int, num_tags: int, num_sizes: int):
-        sizes = np.zeros((n, n, num_sizes), dtype=np.uint64).view()
-        tags = np.zeros((n, n, num_tags), dtype=np.uint64).view()
-        count = np.zeros((n, n), dtype=np.uint64).view()
-        return cls(sizes, tags, count)
+        array = np.zeros((n, n, num_sizes, num_tags), dtype=np.uint64).view()
+        return cls(array)
 
     def regroup(self, localities: list[list[int]]|None):
         if localities is None:
             return None
         num_localities = len(localities)
-        gm = GroupedMatrices.create_empty(num_localities, self.tags.shape[2], self.sizes.shape[2])
+        gm = LocalityMatrix.create_empty(num_localities, self.array.shape[3], self.array.shape[2])
         for sender_locality, sender_ranks in enumerate(localities):
             for recipient_locality, recipient_ranks in enumerate(localities):
                 for sender in sender_ranks:
                     for recipient in recipient_ranks:
-                        gm.sizes[sender_locality, recipient_locality, :] += self.sizes[sender, recipient, :]
-                        gm.tags[sender_locality, recipient_locality, :] += self.tags[sender, recipient, :]
-                        gm.count[sender_locality, recipient_locality] += self.count[sender, recipient]
+                        gm.array[sender_locality, recipient_locality, :, :] += self.array[sender, recipient, :, :]
         return gm
+
+    def tags(self, rank: int):
+        return self.array[rank, :, :, :].sum(2)
+
+    def sizes(self, rank: int):
+        return self.array[rank, :, :, :].sum(3)
+
+    def count(self, rank: int):
+        return self.array[rank, :, :, :].sum((2, 3))
 
 class ComponentData:
     name: str
-    by_rank: GroupedMatrices
-    by_core: GroupedMatrices | None = None
-    by_numa: GroupedMatrices | None = None
-    by_socket: GroupedMatrices | None = None
-    by_node: GroupedMatrices | None = None
+    by_rank: LocalityMatrix
+    by_core: LocalityMatrix | None = None
+    by_numa: LocalityMatrix | None = None
+    by_socket: LocalityMatrix | None = None
+    by_node: LocalityMatrix | None = None
     # occuring_sizes[size_index] = size
     occuring_sizes: UInt64Array[tuple[int]]
     # occuring_sizes[tag_index] = tag
@@ -178,7 +177,7 @@ class ComponentData:
         self.occuring_sizes = occuring_sizes
         self.occuring_tags = occuring_tags
 
-        self.by_rank = GroupedMatrices.create_empty(
+        self.by_rank = LocalityMatrix.create_empty(
             n, occuring_tags.size, occuring_sizes.size
         )
         self.total_bytes_sent = 0
@@ -282,16 +281,13 @@ class WorldData:
                     for callsite in peer.sent_messages.get(comp_n, []):
                         for msg in callsite.msgs:
                             msgs_sent_for_size = 0
+                            size_index = sizes_index_map[msg.size]
                             for tag, msgs_sent in msg.tags.items():
                                 tag_index = tags_index_map[tag]
-                                comp.by_rank.tags[sender, recipient, tag_index] += msgs_sent
+                                comp.by_rank.array[sender, recipient, size_index, tag_index] += msgs_sent
                                 msgs_sent_for_size += msgs_sent
-
-                            size_index = sizes_index_map[msg.size]
-                            comp.by_rank.sizes[sender, recipient, size_index] += msgs_sent_for_size
                             comp.total_bytes_sent += msg.size * msgs_sent_for_size
                     comp.total_msgs_sent += peer.sent_count[comp_n]
-                    comp.by_rank.count[sender, recipient] = peer.sent_count[comp_n]
             comp.by_numa = comp.by_rank.regroup(numa_locality)
             comp.by_socket = comp.by_rank.regroup(socket_locality)
             comp.by_node = comp.by_rank.regroup(node_locality)
