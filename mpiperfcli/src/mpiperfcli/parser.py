@@ -209,36 +209,32 @@ class WorldData:
     def parse_ranks(self, world_path: Path):
         """Read data from rank files into multi-dimensional numpy arrays, which can then be used for plotting."""
         hostnames = set[str]()
-        rank_files = list[RankFile]()
         wall_time = 0
 
-        for i in range(self.meta.num_processes):
-            with open(world_path / rankfile_name(i), "r") as f:
+        occuring_sizes = dict[Component, set[int]]()
+        occuring_tags = dict[Component, set[int]]()
+        unparsed_localities = list[list[RankLocality]]()
+
+        for rank in range(self.meta.num_processes):
+            with open(world_path / rankfile_name(rank), "r") as f:
                 sender_rf = from_toml(RankFile, f.read())
                 hostnames.add(sender_rf.general.hostname)
-                rank_files.append(sender_rf)
                 wall_time = max(wall_time, sender_rf.general.wall_time)
-                assert sender_rf.general.own_rank == i
+                unparsed_localities.append(sender_rf.general.localities)
+                for peer in sender_rf.peers.values():
+                    for comp, callsites in peer.sent_messages.items():
+                        if comp not in occuring_sizes.keys(): # since both always have the same keys, one check is sufficient
+                            occuring_sizes[comp] = set()
+                            occuring_tags[comp] = set()
+                        for callsite in callsites:
+                            for msg in callsite.msgs:
+                                occuring_sizes[comp].add(msg.size)
+                                occuring_tags[comp].update(msg.tags.keys())
+                assert sender_rf.general.own_rank == rank
+
 
         self.wall_time = timedelta(microseconds=wall_time // 1000)
-        component_set = set[Component]()
-
-        for sender_rf in rank_files:
-            for peer in sender_rf.peers.values():
-                component_set.update(peer.components)
-
-        self.meta.components = frozenset(component_set)
-
-        occuring_sizes = {c: set[int]() for c in self.meta.components}
-        occuring_tags = {c: set[int]() for c in self.meta.components}
-        for sender_rf in rank_files:
-            for peer in sender_rf.peers.values():
-                for comp, callsites in peer.sent_messages.items():
-                    for callsite in callsites:
-                        for msg in callsite.msgs:
-                            occuring_sizes[comp].add(msg.size)
-                            occuring_tags[comp].update(msg.tags.keys())
-
+        self.meta.components = frozenset(occuring_sizes.keys())
         self.meta.num_nodes = len(hostnames)
 
         n = self.meta.num_processes
@@ -254,73 +250,81 @@ class WorldData:
             cd = ComponentData(c, cd_occuring_sizes, cd_occuring_tags, n)
             self.components[c] = cd
 
-        node_locality = self._get_localities_from_rfs(rank_files, LocalityType.NODE)
-        numa_locality = self._get_localities_from_rfs(rank_files, LocalityType.NUMA)
-        socket_locality = self._get_localities_from_rfs(rank_files, LocalityType.SOCKET)
-        core_locality = self._get_localities_from_rfs(rank_files, LocalityType.CORE)
+        node_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.NODE)
+        numa_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.NUMA)
+        socket_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.SOCKET)
+        core_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.CORE)
 
-        for comp_n in self.meta.components:
-            # Map from a given size/tag to its index in the relevant numpy array in self.rank_sizes/self.rank_tags respectively
-            comp = self.components[comp_n]
-            tags_index_map = {
-                int(value): index for index, value in enumerate(comp.occuring_tags)
-            }
-            sizes_index_map = {
-                int(value): index for index, value in enumerate(comp.occuring_sizes)
-            }
+        # Map from a component and given size/tag to its index in the relevant numpy array in self.rank_sizes/self.rank_tags respectively
+        tags_index_map = {
+            comp_n: {int(value): index
+                for index, value in enumerate(self.components[comp_n].occuring_tags)}
+            for comp_n in self.meta.components
+        }
+        sizes_index_map = {
+            comp_n: {int(value): index for index, value in enumerate(self.components[comp_n].occuring_sizes)}
+            for comp_n in self.meta.components
+        }
 
-            for sender_rf in rank_files:
-                sender = sender_rf.general.own_rank
-                if sender_rf.general.own_rank >= n:
-                    raise ValueError(f"Invalid own_rank {sender}>=num_proc.")
+        for rank in range(self.meta.num_processes):
+            with open(world_path / rankfile_name(rank), "r") as f:
+                sender_rf = from_toml(RankFile, f.read())
 
-                for recipient, peer in sender_rf.peers.items():
-                    if recipient >= n:
-                        raise ValueError(
-                            f"Invalid peer {recipient}>=num_proc for rank {sender}."
-                        )
-                    for callsite in peer.sent_messages.get(comp_n, []):
-                        for msg in callsite.msgs:
-                            msgs_sent_for_size = 0
-                            for tag, msgs_sent in msg.tags.items():
-                                tag_index = tags_index_map[tag]
-                                comp.by_rank.tags[sender, recipient, tag_index] += msgs_sent
-                                msgs_sent_for_size += msgs_sent
+                for comp_n in self.meta.components:
+                    sender = sender_rf.general.own_rank
+                    comp = self.components[comp_n]
+                    if sender_rf.general.own_rank >= n:
+                        raise ValueError(f"Invalid own_rank {sender}>=num_proc.")
 
-                            size_index = sizes_index_map[msg.size]
-                            comp.by_rank.sizes[sender, recipient, size_index] += msgs_sent_for_size
-                            comp.total_bytes_sent += msg.size * msgs_sent_for_size
-                    comp.total_msgs_sent += peer.sent_count[comp_n]
-                    comp.by_rank.count[sender, recipient] = peer.sent_count[comp_n]
+                    for recipient, peer in sender_rf.peers.items():
+                        if recipient >= n:
+                            raise ValueError(
+                                f"Invalid peer {recipient}>=num_proc for rank {sender}."
+                            )
+                        for callsite in peer.sent_messages.get(comp_n, []):
+                            for msg in callsite.msgs:
+                                msgs_sent_for_size = 0
+                                for tag, msgs_sent in msg.tags.items():
+                                    tag_index = tags_index_map[comp_n][tag]
+                                    comp.by_rank.tags[sender, recipient, tag_index] += msgs_sent
+                                    msgs_sent_for_size += msgs_sent
+
+                                size_index = sizes_index_map[comp_n][msg.size]
+                                comp.by_rank.sizes[sender, recipient, size_index] += msgs_sent_for_size
+                                comp.total_bytes_sent += msg.size * msgs_sent_for_size
+                        comp.total_msgs_sent += peer.sent_count[comp_n]
+                        comp.by_rank.count[sender, recipient] = peer.sent_count[comp_n]
+
+        for comp in self.components.values():
             comp.by_numa = comp.by_rank.regroup(numa_locality)
             comp.by_socket = comp.by_rank.regroup(socket_locality)
             comp.by_node = comp.by_rank.regroup(node_locality)
             comp.by_core = comp.by_rank.regroup(core_locality)
 
-    def _get_locality_from_rf(self, rf: RankFile, type: LocalityType):
+    def _parse_locality(self, rank: int, localities: list[RankLocality], type: LocalityType):
         found = None
-        for locality in rf.general.localities:
+        for locality in localities:
             if locality.type == type:
                 if found is None:
                     found = locality
                 else:
-                    raise Exception(f"Locality type \"{type}\" found multiple times in rank file for rank {rf.general.own_rank}.")
+                    raise Exception(f"Locality type \"{type}\" found multiple times in rank file for rank {rank}.")
         return found
 
-    def _get_localities_from_rfs(self, rfs: list[RankFile], type: LocalityType):
+    def _get_localities_from_rfs(self, rank_localities: list[list[RankLocality]], type: LocalityType):
         localities = list[list[int]]()
-        ranks_covered = [False for _ in rfs]
-        for i, rf in enumerate(rfs):
-            if ranks_covered[i]:
+        ranks_covered = [False for _ in rank_localities]
+        for rank, rank_locality in enumerate(rank_localities):
+            if ranks_covered[rank]:
                 continue
-            found = self._get_locality_from_rf(rf, type)
+            found = self._parse_locality(rank, rank_locality, type)
             if found is None:
                 return None
             for other_rank in found.peers:
-                found_other_rank = self._get_locality_from_rf(rfs[other_rank], type)
+                found_other_rank = self._parse_locality(rank, rank_localities[other_rank], type)
                 if found_other_rank is None or found.peers != found_other_rank.peers:
-                    raise Exception(f"Locality \"{type}\" differs in rank files for rank {i} and {other_rank}.")
+                    raise Exception(f"Locality \"{type}\" differs in rank files for rank {rank} and {other_rank}.")
                 ranks_covered[other_rank] = True
-            ranks_covered[i] = True
+            ranks_covered[rank] = True
             localities.append(found.peers)
         return sorted(localities)
