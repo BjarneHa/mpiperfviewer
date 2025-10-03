@@ -5,7 +5,6 @@ from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
 from serde.msgpack import from_msgpack, to_msgpack
 
-from mpiperfviewer.application_window import ApplicationWindow
 from mpiperfviewer.filter_widgets import FilterPresets
 from mpiperfviewer.plot_view import ProjectData
 from mpiperfviewer.project_state import (
@@ -13,15 +12,16 @@ from mpiperfviewer.project_state import (
     project_saved_in_current_state,
     project_updated,
 )
+from mpiperfviewer.project_view import ProjectView
 
 
 class MainWindow(QMainWindow):
     current_project_file: Path | None
 
     @property
-    def app_window(self) -> ApplicationWindow:
+    def app_window(self) -> ProjectView:
         widget = self.centralWidget()
-        if not isinstance(widget, ApplicationWindow):
+        if not isinstance(widget, ProjectView):
             raise Exception(f"Central widget is of unexpected type {type(widget)}")
         return widget
 
@@ -34,7 +34,7 @@ class MainWindow(QMainWindow):
             source_dir = Path(args[0])
         if len(args) > 1:
             component = args[1]
-        app_window = ApplicationWindow(
+        app_window = ProjectView(
             ProjectData(source_dir, component, [], [], FilterPresets())
         )
         self.setCentralWidget(app_window)
@@ -63,7 +63,7 @@ class MainWindow(QMainWindow):
             return
         self.hide()
         _ = self.takeCentralWidget()
-        self.setCentralWidget(ApplicationWindow())
+        self.setCentralWidget(ProjectView())
         self.show()
 
     @Slot()
@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         project_data = from_msgpack(ProjectData, data)
         self.hide()
         _ = self.takeCentralWidget()
-        app_window = ApplicationWindow(project_data)
+        app_window = ProjectView(project_data)
         self.setCentralWidget(app_window)
         self.current_project_file = Path(save_name)
         self.show()

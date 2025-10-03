@@ -2,6 +2,7 @@ from pathlib import Path
 from tomllib import TOMLDecodeError
 from typing import final
 
+from mpiperfcli.parser import WorldData
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -11,7 +12,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mpiperfcli.parser import WorldData
 from mpiperfviewer.create_views import CreateMatrixView, CreateRankView
 from mpiperfviewer.filter_widgets import FilterPresets
 from mpiperfviewer.plot_view import PlotViewer, ProjectData
@@ -19,7 +19,7 @@ from mpiperfviewer.statistics_view import StatisticsView
 
 
 @final
-class ApplicationWindow(QWidget):
+class ProjectView(QWidget):
     def _get_directory_from_dialog(self):
         file = QFileDialog.getExistingDirectory(self)
         if file == "":
