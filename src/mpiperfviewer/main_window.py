@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtCore import Slot
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
-from serde.msgpack import from_msgpack, to_msgpack
+from serde.json import from_json, to_json
 
 from mpiperfviewer.filter_widgets import FilterPresets
 from mpiperfviewer.plot_view import ProjectData
@@ -58,13 +58,13 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def new_project(self):
-        project_updated()
         if not self.are_you_sure():
             return
         self.hide()
         _ = self.takeCentralWidget()
         self.setCentralWidget(ProjectView())
         self.show()
+        project_updated()
 
     @Slot()
     def open_project(self):
@@ -78,9 +78,9 @@ class MainWindow(QMainWindow):
         )
         if save_name == "":
             return
-        with open(save_name, "rb") as f:
+        with open(save_name, "r") as f:
             data = f.read()
-        project_data = from_msgpack(ProjectData, data)
+        project_data = from_json(ProjectData, data)
         self.hide()
         _ = self.takeCentralWidget()
         app_window = ProjectView(project_data)
@@ -106,8 +106,8 @@ class MainWindow(QMainWindow):
             self.save_project_as()
             return
         project_data = self.app_window.export_project()
-        with open(str(self.current_project_file), "wb") as f:
-            _ = f.write(to_msgpack(project_data))
+        with open(str(self.current_project_file), "w") as f:
+            _ = f.write(to_json(project_data))
             project_saved()
 
     @Slot()
