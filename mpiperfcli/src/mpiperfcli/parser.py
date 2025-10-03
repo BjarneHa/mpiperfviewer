@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
@@ -9,6 +10,8 @@ import numpy as np
 from serde import deserialize, field, from_dict
 from serde.toml import from_toml
 
+# If more rank files are part of WorldData, they are not cached
+RANK_FILE_CACHE_THRESHOLD = 500
 
 class LocalityType(StrEnum):
     CORE = "hwcore"
@@ -238,8 +241,7 @@ class ComponentData:
         lazy_data = self._tags_data_list.get(rank)
         if lazy_data is not None:
             return lazy_data
-        with self._world_data.open_rank(rank) as f:
-            sender_rf = from_toml(RankFile, f.read())
+        with self._world_data.open_rank(rank) as sender_rf:
             data = TagData.from_rf(sender_rf, self.name)
             self._tags_data_list[rank] = data
             return data
@@ -248,8 +250,7 @@ class ComponentData:
          lazy_data = self._size_data_list.get(rank)
          if lazy_data is not None:
              return lazy_data
-         with self._world_data.open_rank(rank) as f:
-             sender_rf = from_toml(RankFile, f.read())
+         with self._world_data.open_rank(rank) as sender_rf:
              data = SizeData.from_rf(sender_rf, self.name)
              self._size_data_list[rank] = data
              return data
@@ -258,26 +259,47 @@ class WorldData:
     meta: WorldMeta
     components: dict[Component, ComponentData]
     wall_time: timedelta
+    _rank_file_cache: dict[int, RankFile] | None
 
     def __init__(self, world_path: Path):
+        self._rank_file_cache = None
         self.parse_metadata(world_path)
         self.parse_ranks()
 
+    @contextmanager
     def open_rank(self, rank: int):
-        return open(self.meta.source_directory / rankfile_name(rank), "r")
+        if self._rank_file_cache is not None:
+            cached = self._rank_file_cache.get(rank)
+            if cached is not None:
+                yield cached
+                return
+        f = open(self.meta.source_directory / rankfile_name(rank), "r")
+        try:
+            parsed = from_toml(RankFile, f.read())
+            if self._rank_file_cache is not None:
+                self._rank_file_cache[rank] = parsed
+            yield parsed
+        finally:
+            f.close()
+
 
     # TODO this will hopefully be done differently in the future
     def parse_metadata(self, world_path: Path):
         """Parse metadata from the world file/path required for further processing."""
-        with open(world_path / rankfile_name(0), "r") as f:
-            rf0 = from_toml(RankFile, f.read())
-            self.meta = WorldMeta(
-                num_processes=rf0.general.num_procs,
-                mpi_runtime=rf0.general.mpi_runtime,
-                version=(0, 0, 0),
-                num_nodes=0,
-                source_directory=world_path,
-            )
+        # set source_directory for open_rank()
+        self.meta = WorldMeta(
+            num_processes=0,
+            mpi_runtime="",
+            version=(0, 0, 0),
+            num_nodes=0,
+            source_directory=world_path,
+        )
+        with self.open_rank(0) as rf0:
+            self.meta.num_processes = rf0.general.num_procs
+            self.meta.mpi_runtime = rf0.general.mpi_runtime
+            if self.meta.num_processes < RANK_FILE_CACHE_THRESHOLD:
+                self._rank_file_cache = {0: rf0}
+
 
     def parse_ranks(self):
         """Read data from rank files into multi-dimensional numpy arrays, which can then be used for plotting."""
@@ -288,8 +310,7 @@ class WorldData:
         unparsed_localities = list[list[RankLocality]]()
 
         for rank in range(self.meta.num_processes):
-            with self.open_rank(rank) as f:
-                sender_rf = from_toml(RankFile, f.read())
+            with self.open_rank(rank) as sender_rf:
                 hostnames.add(sender_rf.general.hostname)
                 wall_time = max(wall_time, sender_rf.general.wall_time)
                 unparsed_localities.append(sender_rf.general.localities)
@@ -314,9 +335,7 @@ class WorldData:
         core_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.CORE)
 
         for rank in range(self.meta.num_processes):
-            with self.open_rank(rank) as f:
-                sender_rf = from_toml(RankFile, f.read())
-
+            with self.open_rank(rank) as sender_rf:
                 for comp_n in self.meta.components:
                     sender = sender_rf.general.own_rank
                     comp = self.components[comp_n]
