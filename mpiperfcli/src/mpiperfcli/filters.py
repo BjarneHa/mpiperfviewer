@@ -150,7 +150,7 @@ class ExactFilter(SerializedFilter):
         return data == self.n
 
 
-class DiscreteMultiRangeFilter(Filter):
+class MultiRangeFilter(Filter):
     ranges: list[RangeFilter]
     exact: list[ExactFilter]
     text: str
@@ -176,7 +176,7 @@ class DiscreteMultiRangeFilter(Filter):
 
     @staticmethod
     def from_str(s: str):
-        return DiscreteMultiRangeFilter(s)
+        return MultiRangeFilter(s)
 
     @override
     def apply(self, data: NDArray[np.int64] | NDArray[np.uint64]):

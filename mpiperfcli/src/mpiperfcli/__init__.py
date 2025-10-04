@@ -9,9 +9,9 @@ from pathlib import Path
 from matplotlib.figure import Figure
 
 from mpiperfcli.filters import (
-    DiscreteMultiRangeFilter,
     FilterState,
     FilterType,
+    MultiRangeFilter,
     RangeFilter,
 )
 from mpiperfcli.parser import ComponentData, WorldData, WorldMeta
@@ -220,11 +220,11 @@ def main():
                             )
                         filters[plot_class].count = range_filter
                     case FilterType.SIZE:
-                        filters[plot_class].size = DiscreteMultiRangeFilter.from_str(
+                        filters[plot_class].size = MultiRangeFilter.from_str(
                             filter_text
                         )
                     case FilterType.TAGS:
-                        filters[plot_class].tags = DiscreteMultiRangeFilter.from_str(
+                        filters[plot_class].tags = MultiRangeFilter.from_str(
                             filter_text
                         )
             except ValueError as e:

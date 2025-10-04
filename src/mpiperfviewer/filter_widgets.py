@@ -5,11 +5,11 @@ import numpy as np
 import qtawesome as qta
 from mpiperfcli.filters import (
     BadFilter,
-    DiscreteMultiRangeFilter,
     Filter,
     FilterState,
     FilterType,
     InvertedFilter,
+    MultiRangeFilter,
     RangeFilter,
     Unfiltered,
 )
@@ -320,7 +320,7 @@ class RangeFilterObject(FilterObjectBase):
         raise Exception("Unimplemented!")
 
 
-DISCRETE_MULTIRANGE_REGEXP = r"[inf0-9,;\+\-\[\]]*"
+MULTIRANGE_REGEXP = r"[inf0-9,;\+\-\[\]]*"
 
 COLLECTIVES = [
     (-10, "MPI_Allgather"),
@@ -396,11 +396,11 @@ class CollectivesDialog(QDialog):
 
 
 @serde
-class DiscreteMultiRangeFilterData:
+class MultiRangeFilterData:
     data: str
 
 
-class DiscreteMultiRangeFilterWidget(QWidget):
+class MultiRangeFilterWidget(QWidget):
     """A filter which allows the user to enter multiple ranges and values in a comma-separated format."""
 
     _valid_syntax: str = "Filter syntax is valid."
@@ -417,7 +417,7 @@ class DiscreteMultiRangeFilterWidget(QWidget):
         self._line_edit = QLineEdit()
         self._line_edit.setPlaceholderText("x,[y;z]")
         _ = self._line_edit.textChanged.connect(self._filter_line_changed)
-        validator = QRegularExpressionValidator(DISCRETE_MULTIRANGE_REGEXP)
+        validator = QRegularExpressionValidator(MULTIRANGE_REGEXP)
         self._line_edit.setValidator(validator)
         edit_layout = QHBoxLayout()
         self._filter_status_btn = QPushButton(self, flat=True)
@@ -458,14 +458,14 @@ class DiscreteMultiRangeFilterWidget(QWidget):
     @Slot()
     def _filter_line_changed(self):
         try:
-            _ = DiscreteMultiRangeFilter(self._line_edit.text())
+            _ = MultiRangeFilter(self._line_edit.text())
             self._set_filter_status(ok=True)
         except ValueError as e:
             self._set_filter_status(ok=False, msg=str(e))
 
     @Slot()
     def edit_pressed(self):
-        filter = DiscreteMultiRangeFilter(self._line_edit.text(), tolerant=True)
+        filter = MultiRangeFilter(self._line_edit.text(), tolerant=True)
         tags = np.array([tag for tag, _ in COLLECTIVES])
         tag_included = filter.apply(tags)
         for cb, included in zip(self._collectives.checkboxes, tag_included):
@@ -483,7 +483,7 @@ class DiscreteMultiRangeFilterWidget(QWidget):
     @Slot(int)
     def _collectives_unchecked(self, tag: int):
         text = self._line_edit.text()
-        filter = DiscreteMultiRangeFilter(text, tolerant=True)
+        filter = MultiRangeFilter(text, tolerant=True)
         segments = text.split(",")
         for exact in filter.exact:
             if exact.segment is None:
@@ -510,7 +510,7 @@ class DiscreteMultiRangeFilterWidget(QWidget):
 
     def state(self) -> Filter:
         try:
-            return DiscreteMultiRangeFilter(self._line_edit.text())
+            return MultiRangeFilter(self._line_edit.text())
         except ValueError as e:
             _ = QMessageBox.warning(self, "Error in Filter", str(e))
             return BadFilter()
@@ -521,15 +521,15 @@ class DiscreteMultiRangeFilterWidget(QWidget):
         if disabled:
             self._collectives.hide()
 
-    def copy_values(self, other: "DiscreteMultiRangeFilterWidget"):
+    def copy_values(self, other: "MultiRangeFilterWidget"):
         self._line_edit.setText(other._line_edit.text())
         self._collectives.copy_values(other._collectives)
 
-    def import_preset(self, preset: DiscreteMultiRangeFilterData):
+    def import_preset(self, preset: MultiRangeFilterData):
         self._line_edit.setText(preset.data)
 
     def export_data(self):
-        return DiscreteMultiRangeFilterData(self._line_edit.text())
+        return MultiRangeFilterData(self._line_edit.text())
 
 
 class TagFilterMode(IntEnum):
@@ -541,16 +541,16 @@ class TagFilterMode(IntEnum):
 class TagFilterData:
     enabled: bool
     mode: int
-    include_preset: DiscreteMultiRangeFilterData
-    exclude_preset: DiscreteMultiRangeFilterData
+    include_preset: MultiRangeFilterData
+    exclude_preset: MultiRangeFilterData
 
 
 class TagFilterObject(FilterObjectBase):
     _checkbox: QCheckBox
-    _include_filter: DiscreteMultiRangeFilterWidget
+    _include_filter: MultiRangeFilterWidget
     _radio_group: QButtonGroup
     _include_radio: QRadioButton
-    _exclude_filter: DiscreteMultiRangeFilterWidget
+    _exclude_filter: MultiRangeFilterWidget
     _exclude_radio: QRadioButton
     _parent_widget: QWidget
     _presets: dict[str, TagFilterData] | None
@@ -587,7 +587,7 @@ class TagFilterObject(FilterObjectBase):
         self._include_radio.setText("Include")
         layout.addWidget(self._include_radio, r + 1, 0, 1, 5)
 
-        self._include_filter = DiscreteMultiRangeFilterWidget(parent)
+        self._include_filter = MultiRangeFilterWidget(parent)
         layout.addWidget(self._include_filter, r + 2, 0, 1, 5)
 
         self._exclude_radio = QRadioButton(parent)
@@ -595,7 +595,7 @@ class TagFilterObject(FilterObjectBase):
         self._exclude_radio.setText("Exclude")
         layout.addWidget(self._exclude_radio, r + 3, 0, 1, 5)
 
-        self._exclude_filter = DiscreteMultiRangeFilterWidget(parent)
+        self._exclude_filter = MultiRangeFilterWidget(parent)
         layout.addWidget(self._exclude_filter, r + 4, 0, 1, 5)
 
         self._check_changed(Qt.CheckState.Unchecked)
