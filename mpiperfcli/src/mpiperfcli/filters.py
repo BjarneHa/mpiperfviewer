@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from itertools import chain
-from typing import Any, override
+from typing import override
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,13 +17,13 @@ class FilterType(Enum):
 
 class Filter(ABC):
     @abstractmethod
-    def apply(self, data: NDArray[Any]) -> NDArray[Any]:
+    def apply(self, data: NDArray[np.int64] | NDArray[np.uint64]) -> NDArray[np.bool]:
         pass
 
 
 class Unfiltered(Filter):
     @override
-    def apply(self, data: NDArray[Any]) -> NDArray[Any]:
+    def apply(self, data: NDArray[np.int64] | NDArray[np.uint64]) -> NDArray[np.bool]:
         return np.ones_like(data, dtype=np.dtype(np.bool))
 
 
@@ -65,7 +65,7 @@ class RangeFilter(SerializedFilter):
         )
 
     @override
-    def apply(self, data: NDArray[Any]):
+    def apply(self, data: NDArray[np.int64] | NDArray[np.uint64]):
         metric_min = np.iinfo(data.dtype).min if self.min is None else self.min
         metric_max = np.iinfo(data.dtype).max if self.max is None else self.max
         filter = (metric_min <= data) & (data <= metric_max)
@@ -146,7 +146,7 @@ class ExactFilter(SerializedFilter):
         return type(other) is ExactFilter and self.n == other.n
 
     @override
-    def apply(self, data: NDArray[Any]) -> NDArray[Any]:
+    def apply(self, data: NDArray[np.int64] | NDArray[np.uint64]) -> NDArray[np.bool]:
         return data == self.n
 
 
@@ -179,7 +179,7 @@ class DiscreteMultiRangeFilter(Filter):
         return DiscreteMultiRangeFilter(s)
 
     @override
-    def apply(self, data: NDArray[Any]):
+    def apply(self, data: NDArray[np.int64] | NDArray[np.uint64]):
         filter = np.zeros_like(data, dtype=np.bool)
         for range in self.ranges:
             filter |= range.apply(data)
@@ -199,7 +199,7 @@ class InvertedFilter(Filter):
         self._inner = inner
 
     @override
-    def apply(self, data: NDArray[Any]):
+    def apply(self, data: NDArray[np.int64] | NDArray[np.uint64]):
         return ~self._inner.apply(data)
 
 
