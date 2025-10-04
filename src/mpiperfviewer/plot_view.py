@@ -113,15 +113,15 @@ class PlotWidget(QWidget):
 
     def _update_cmd(self):
         name = self.plot.cli_name()
-        cmd = f'mpiperfcli -p "{name}'
+        cmd = f"mpiperfcli -p '{name}"
         if self.plot.cli_param() != "":
             cmd += "." + self.plot.cli_param()
-        cmd += '"'
+        cmd += "'"
         cli_filters = self.filter_view.filter_state.cli_format()
         if cli_filters != "":
-            cmd += f' -x "{name}={cli_filters}"'
-        cmd += f' "{self.plot.world_meta.source_directory.absolute()}"'
-        cmd += f' "{self.plot.component_data.name}"'
+            cmd += f" -x '{name}={cli_filters}'"
+        cmd += f" '{self.plot.world_meta.source_directory.absolute()}'"
+        cmd += f" '{self.plot.component_data.name}'"
         self._cmd_line_edit.setText(cmd)
 
     @property

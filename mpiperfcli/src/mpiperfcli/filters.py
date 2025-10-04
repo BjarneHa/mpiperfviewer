@@ -202,6 +202,10 @@ class InvertedFilter(Filter):
     def apply(self, data: NDArray[np.int64] | NDArray[np.uint64]):
         return ~self._inner.apply(data)
 
+    @override
+    def __str__(self) -> str:
+        return "!" + str(self._inner)
+
 
 @dataclass
 class FilterState:

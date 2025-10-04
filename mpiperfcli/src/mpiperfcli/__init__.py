@@ -11,6 +11,7 @@ from matplotlib.figure import Figure
 from mpiperfcli.filters import (
     FilterState,
     FilterType,
+    InvertedFilter,
     MultiRangeFilter,
     RangeFilter,
 )
@@ -160,6 +161,13 @@ def create_parser():
     )
     return parser
 
+def parse_filter(s: str):
+    filter_text = s[1:] if s.startswith("!") else s
+    filter = MultiRangeFilter.from_str(filter_text)
+    if s.startswith("!"):
+        return InvertedFilter(filter)
+    else:
+        return filter
 
 def main():
     parser = create_parser()
@@ -220,13 +228,9 @@ def main():
                             )
                         filters[plot_class].count = range_filter
                     case FilterType.SIZE:
-                        filters[plot_class].size = MultiRangeFilter.from_str(
-                            filter_text
-                        )
+                        filters[plot_class].size = parse_filter(filter_text)
                     case FilterType.TAGS:
-                        filters[plot_class].tags = MultiRangeFilter.from_str(
-                            filter_text
-                        )
+                        filters[plot_class].tags = parse_filter(filter_text)
             except ValueError as e:
                 print(
                     f'Error parsing "{filter_name}" for plot type "{plot_name}": {e}. Exiting...',
