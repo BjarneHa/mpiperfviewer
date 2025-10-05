@@ -3,12 +3,14 @@ from enum import StrEnum
 from typing import Any, cast, override
 
 import numpy as np
-from matplotlib.colors import LogNorm
+from matplotlib import colormaps
+from matplotlib.axes import Axes
+from matplotlib.colors import Colormap, LogNorm
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy.typing import NDArray
 
-from mpiperfcli.filters import Filter, FilterState, FilterType, RangeFilter
+from mpiperfcli.filters import Filter, FilterState, FilterType, RangeFilter, Unfiltered
 from mpiperfcli.parser import ComponentData, SizeData, TagData, UInt64Array, WorldMeta
 
 
@@ -280,9 +282,27 @@ class ThreeDimPlotBase(RankPlotBase, ABC):
 class PixelPlotBase(ThreeDimPlotBase, ABC):
     def _get_norm(self, filters: FilterState):
         if isinstance(filters.count, RangeFilter):
-            return LogNorm(filters.count.min, filters.count.max)
+            # LogNorm can not have 0 as vmin or vmax
+            vmin = max(filters.count.min, 1) if filters.count.min is not None else None
+            vmax = max(filters.count.max, 1) if filters.count.max is not None else None
+            return LogNorm(vmin, vmax, False)
         else:
             return LogNorm()
+
+    def _get_cmap(self, cmap: Colormap, filters: FilterState):
+        cmap = cmap.copy()
+        col = "0.7" # grayscale format
+        if isinstance(filters.count, Unfiltered) or filters.count.min is None or filters.count.min < 1:
+            cmap.set_extremes(over=col)
+        else:
+            # bad explicitly affects zero entries, as log(0) is undefined an LogNorm is used
+            cmap.set_extremes(bad=col, under=col, over=col)
+        return cmap
+
+    def imshow(self, ax: Axes, occurances: NDArray[np.uint64], cmap: Colormap, filters: FilterState):
+        cmap = self._get_cmap(cmap, filters)
+        img = ax.imshow(occurances, cmap=cmap, norm=self._get_norm(filters), aspect="auto")
+        return img
 
     @override
     @classmethod
@@ -459,9 +479,7 @@ class TagsPixelPlot(PixelPlotBase):
             filters.count,
         )
 
-        img = ax.imshow(
-            tag_occurances, cmap="Greens", norm=self._get_norm(filters), aspect="auto"
-        )
+        img = self.imshow(ax, tag_occurances, colormaps["Greens"], filters)
 
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)
@@ -506,9 +524,7 @@ class SizePixelPlot(PixelPlotBase):
             filters.count,
         )
 
-        img = ax.imshow(
-            size_occurances, cmap="Oranges", norm=self._get_norm(filters), aspect="auto"
-        )
+        img = self.imshow(ax, size_occurances, colormaps["Oranges"], filters)
 
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)
