@@ -62,7 +62,7 @@ class PlotBase(ABC):
     def filter_types(cls) -> list[FilterType]: ...
 
     @abstractmethod
-    def init_plot(self, filters: FilterState) -> None: ...
+    def draw_plot(self, filters: FilterState) -> None: ...
 
     @abstractmethod
     def tab_title(self) -> str: ...
@@ -167,7 +167,7 @@ class SizeMatrixPlot(MatrixPlotBase):
         return "total_matrix"
 
     @override
-    def init_plot(self, filters: FilterState):
+    def draw_plot(self, filters: FilterState):
         self.plot_matrix(self.group.total_sent)
 
     @override
@@ -201,7 +201,7 @@ class CountMatrixPlot(MatrixPlotBase):
         return "msgs_matrix"
 
     @override
-    def init_plot(self, filters: FilterState):
+    def draw_plot(self, filters: FilterState):
         self.plot_matrix(self.group.msgs_sent)
 
     @override
@@ -335,7 +335,7 @@ class TagsBar3DPlot(ThreeDimBarBase):
         return "tags_3d"
 
     @override
-    def init_plot(self, filters: FilterState):
+    def draw_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
 
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
@@ -384,7 +384,7 @@ class SizeBar3DPlot(ThreeDimBarBase):
         return "size_3d"
 
     @override
-    def init_plot(self, filters: FilterState):
+    def draw_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self._data.occuring_sizes,
@@ -426,7 +426,7 @@ class Counts2DBarPlot(RankPlotBase):
         return "counts"
 
     @override
-    def init_plot(self, filters: FilterState):
+    def draw_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         x = np.arange(0, self.world_meta.num_processes)
         y = self.component_data.by_rank.msgs_sent[self._rank, :]
@@ -470,7 +470,7 @@ class TagsPixelPlot(PixelPlotBase):
         return "tags_px"
 
     @override
-    def init_plot(self, filters: FilterState):
+    def draw_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self._data.occuring_tags,
@@ -515,7 +515,7 @@ class SizePixelPlot(PixelPlotBase):
         return "size_px"
 
     @override
-    def init_plot(self, filters: FilterState):
+    def draw_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self._data.occuring_sizes,

@@ -157,7 +157,7 @@ class PlotWidget(QWidget):
         self.closed.emit()
 
     def init_plot(self):
-        self.plot.init_plot(self.filter_view.filter_state)
+        self.plot.draw_plot(self.filter_view.filter_state)
 
     def export_plot(self):
         return PlotWidgetExportData(

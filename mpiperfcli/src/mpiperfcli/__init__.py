@@ -286,7 +286,7 @@ def main():
     )
     for filename, plot_base in plot_bases:
         complete_fname = output_directory / filename
-        plot_base.init_plot(filters.get(type(plot_base), FilterState()))
+        plot_base.draw_plot(filters.get(type(plot_base), FilterState()))
         plot_base.fig.savefig(
             complete_fname,
             transparent=parser_data.transparent,
