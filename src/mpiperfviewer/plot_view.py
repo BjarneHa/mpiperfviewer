@@ -148,7 +148,7 @@ class PlotWidget(QWidget):
     def filters_changed(self):
         project_updated()
         self.plot.fig.clear()
-        self.init_plot()
+        self.draw_plot()
         self.canvas.draw_idle()
         self._update_cmd()
 
@@ -156,7 +156,7 @@ class PlotWidget(QWidget):
     def closeEvent(self, _event: QCloseEvent) -> None:
         self.closed.emit()
 
-    def init_plot(self):
+    def draw_plot(self):
         self.plot.draw_plot(self.filter_view.filter_state)
 
     def export_plot(self):
@@ -268,12 +268,8 @@ class PlotViewer(QGroupBox):
         _ = plot.closed.connect(self.plotwidget_closed)
         _ = plot.reattach_or_detach_requested.connect(self.reattach_or_detach_tab)
         for other_plot in self._all_plots:
-            _ = plot.filter_view.filter_applied_globally.connect(
-                other_plot.filter_view.apply_nonlocal_filter
-            )
-            _ = other_plot.filter_view.filter_applied_globally.connect(
-                plot.filter_view.apply_nonlocal_filter
-            )
+            _ = plot.filter_view.connect_filters(other_plot.filter_view)
+            _ = other_plot.filter_view.connect_filters(plot.filter_view)
         if detached:
             plot.setParent(None)
             plot.showNormal()
@@ -288,7 +284,7 @@ class PlotViewer(QGroupBox):
                 _ = self._tab_widget.addTab(plot, plot.icon, plot.title)
             if activate:
                 self._tab_widget.setCurrentWidget(plot)
-        plot.init_plot()
+        plot.draw_plot()
 
     @Slot()
     def reattach_or_detach_tab(self):
@@ -381,7 +377,7 @@ class PlotViewer(QGroupBox):
     def _update_plots(self):
         for plot in self._all_plots:
             plot.canvas.figure.clear()
-            plot.init_plot()
+            plot.draw_plot()
             plot.canvas.draw_idle()
 
     def export_tab_plots(self):

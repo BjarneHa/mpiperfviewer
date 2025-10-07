@@ -1,11 +1,10 @@
 from enum import IntEnum
-from typing import override
+from typing import Self, override
 
 import numpy as np
 import qtawesome as qta
 from mpiperfcli.filters import (
     BadFilter,
-    Filter,
     FilterState,
     FilterType,
     InvertedFilter,
@@ -215,9 +214,39 @@ class AbstractPresetDialog[T](QDialog):
                 return None
 
 
-class FilterObjectBase(QObject):
-    def update_filterstate(self, fs: FilterState) -> None:
+# ABC does not work properly with PySide widgets
+class FilterObjectBase[F, Data](QObject):
+    filterstate_changed: Signal = Signal()
+    applied_everywhere: Signal = Signal(object)
+
+    def _apply_everywhere(self):
+        self.applied_everywhere.emit(self.export_data())
+
+    @Slot()
+    def update_filterstate(self) -> None:
         raise Exception("Unimplemented!")
+
+    def state(self) -> F | Unfiltered:
+        raise Exception("Unimplemented!")
+
+    @Slot()
+    def import_preset(self, preset: Data) -> None:
+        raise Exception("Unimplemented!")
+
+    def export_data(self) -> Data:
+        raise Exception("Unimplemented!")
+
+    def _add_apply_buttons(self, layout: QGridLayout):
+        r = layout.rowCount()
+        apply = QPushButton("Apply")
+        apply.setIcon(qta.icon("mdi6.check"))
+        apply_everywhere = QPushButton("Apply Everywhere")
+        apply_everywhere.setIcon(qta.icon("mdi6.check-all"))
+        layout.addWidget(apply, r, 0, 1, 5)
+        layout.addWidget(apply_everywhere, r + 1, 0, 1, 5)
+        _ = apply.clicked.connect(self.update_filterstate)
+        _ = apply_everywhere.clicked.connect(self.update_filterstate)
+        _ = apply_everywhere.clicked.connect(self._apply_everywhere)
 
 
 @serde
@@ -227,25 +256,28 @@ class RangeFilterData:
     max: int | None
 
 
-class RangeFilterObject(FilterObjectBase):
+class RangeFilterObject(FilterObjectBase[RangeFilter, RangeFilterData]):
     _checkbox: QCheckBox
     _min_edit: QLineEdit
     _max_edit: QLineEdit
     _parent_widget: QWidget
     _presets: dict[str, RangeFilterData] | None
+    _filter_state: FilterState
 
     def __init__(
         self,
-        filter: str,
+        name: str,
         description: str,
         layout: QGridLayout,
+        filter_state: FilterState,
         parent: QWidget,
         presets: dict[str, RangeFilterData] | None = None,
     ):
         super().__init__(parent)
         self._parent_widget = parent
         self._presets = presets
-        self._checkbox = QCheckBox(filter, parent)
+        self._filter_state = filter_state
+        self._checkbox = QCheckBox(name, parent)
         self._checkbox.setToolTip(description)
         _ = self._checkbox.checkStateChanged.connect(self._check_changed)
         r = layout.rowCount()
@@ -268,9 +300,11 @@ class RangeFilterObject(FilterObjectBase):
         layout.addWidget(self._min_edit, r + 1, 0)
         layout.addWidget(QLabel("≤"), r + 1, 1)
         layout.addWidget(QLabel("≤"), r + 1, 3)
-        filter_label = QLabel(f"{filter}")
+        filter_label = QLabel(f"{name}")
         layout.addWidget(filter_label, r + 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._max_edit, r + 1, 4)
+        if presets is not None: # Only add buttons if not in preset creation dialog
+            self._add_apply_buttons(layout)
 
     @Slot()
     def _check_changed(self, value: Qt.CheckState):
@@ -278,6 +312,7 @@ class RangeFilterObject(FilterObjectBase):
         self._min_edit.setDisabled(not checked)
         self._max_edit.setDisabled(not checked)
 
+    @override
     def state(self):
         if not self._checkbox.isChecked():
             return Unfiltered()
@@ -293,20 +328,15 @@ class RangeFilterObject(FilterObjectBase):
             pass
         return RangeFilter(min, max)
 
-    def from_state(self, state: RangeFilter):
-        self._min_edit.setText(str(state.min) if state.min is not None else "")
-        self._max_edit.setText(str(state.max) if state.max is not None else "")
-
-    def copy_values(self, other: "RangeFilterObject"):
-        self._checkbox.setCheckState(other._checkbox.checkState())
-        self._min_edit.setText(other._min_edit.text())
-        self._max_edit.setText(other._max_edit.text())
-
+    @override
+    @Slot()
     def import_preset(self, preset: RangeFilterData):
         self._checkbox.setChecked(preset.enabled)
         self._min_edit.setText(str(preset.min) if preset.min is not None else "")
         self._max_edit.setText(str(preset.max) if preset.max is not None else "")
+        self.update_filterstate()
 
+    @override
     def export_data(self):
         min = self._min_edit.text()
         max = self._max_edit.text()
@@ -508,7 +538,7 @@ class MultiRangeFilterWidget(QWidget):
         text = ",".join(segments)
         self._line_edit.setText(text)
 
-    def state(self) -> Filter:
+    def state(self):
         try:
             return MultiRangeFilter(self._line_edit.text())
         except ValueError as e:
@@ -525,6 +555,7 @@ class MultiRangeFilterWidget(QWidget):
         self._line_edit.setText(other._line_edit.text())
         self._collectives.copy_values(other._collectives)
 
+    @Slot()
     def import_preset(self, preset: MultiRangeFilterData):
         self._line_edit.setText(preset.data)
 
@@ -545,7 +576,7 @@ class TagFilterData:
     exclude_preset: MultiRangeFilterData
 
 
-class TagFilterObject(FilterObjectBase):
+class TagFilterObject(FilterObjectBase[MultiRangeFilter|BadFilter|InvertedFilter, TagFilterData]):
     _checkbox: QCheckBox
     _include_filter: MultiRangeFilterWidget
     _radio_group: QButtonGroup
@@ -554,16 +585,19 @@ class TagFilterObject(FilterObjectBase):
     _exclude_radio: QRadioButton
     _parent_widget: QWidget
     _presets: dict[str, TagFilterData] | None
+    _filter_state: FilterState
 
     def __init__(
         self,
         layout: QGridLayout,
+        filter_state: FilterState,
         parent: QWidget,
         presets: dict[str, TagFilterData] | None = None,
     ):
         super().__init__(parent)
         self._parent_widget = parent
         self._presets = presets
+        self._filter_state = filter_state
         tags_description = "Select specific ranges of tags to plot."
         self._checkbox = QCheckBox("tags", parent)
         self._checkbox.setToolTip(tags_description)
@@ -599,6 +633,8 @@ class TagFilterObject(FilterObjectBase):
         layout.addWidget(self._exclude_filter, r + 4, 0, 1, 5)
 
         self._check_changed(Qt.CheckState.Unchecked)
+        if presets is not None: # Only show if not in preset creation dialog
+            self._add_apply_buttons(layout)
 
     @Slot()
     def _check_changed(self, value: Qt.CheckState):
@@ -608,6 +644,7 @@ class TagFilterObject(FilterObjectBase):
         self._include_filter.set_disabled(not checked)
         self._exclude_filter.set_disabled(not checked)
 
+    @override
     def state(self):
         if not self._checkbox.isChecked():
             return Unfiltered()
@@ -623,8 +660,10 @@ class TagFilterObject(FilterObjectBase):
                 raise Exception("Unexpected active radio.")
 
     @override
-    def update_filterstate(self, fs: FilterState):
-        fs.tags = self.state()
+    @Slot()
+    def update_filterstate(self):
+        self._filter_state.tags = self.state()
+        self.filterstate_changed.emit()
 
     def copy_values(self, other: "TagFilterObject"):
         self._checkbox.setCheckState(other._checkbox.checkState())
@@ -633,6 +672,8 @@ class TagFilterObject(FilterObjectBase):
         self._include_filter.copy_values(other._include_filter)
         self._exclude_filter.copy_values(other._exclude_filter)
 
+    @override
+    @Slot()
     def import_preset(self, preset: TagFilterData):
         self._checkbox.setChecked(preset.enabled)
         match TagFilterMode(preset.mode):
@@ -642,7 +683,9 @@ class TagFilterObject(FilterObjectBase):
                 self._exclude_radio.setChecked(True)
         self._include_filter.import_preset(preset.include_preset)
         self._exclude_filter.import_preset(preset.exclude_preset)
+        self.update_filterstate()
 
+    @override
     def export_data(self):
         return TagFilterData(
             self._checkbox.isChecked(),
@@ -664,7 +707,7 @@ class TagFilterPresetEditDialog(PresetEditDialog[TagFilterData]):
 
     def __init__(self, parent: QWidget, name: str, preset: TagFilterData | None):
         super().__init__(parent, name)
-        self._filter_obj = TagFilterObject(self._filter_layout, self)
+        self._filter_obj = TagFilterObject(self._filter_layout, FilterState(), self)
         if preset is not None:
             self._filter_obj.import_preset(preset)
 
@@ -681,14 +724,16 @@ class TagFilterPresetDialog(AbstractPresetDialog[TagFilterData]):
 
 class SizeFilterObject(RangeFilterObject):
     description: str = "Select a specific range of sizes to plot."
+    applied_everywhere: Signal = Signal(object)
 
     def __init__(
         self,
         layout: QGridLayout,
+        filter_state: FilterState,
         parent: QWidget,
         presets: dict[str, RangeFilterData] | None = None,
     ):
-        super().__init__("size", self.description, layout, parent, presets)
+        super().__init__("size", self.description, layout, filter_state, parent, presets)
 
     @override
     def _open_preset_dialogue(self):
@@ -698,8 +743,10 @@ class SizeFilterObject(RangeFilterObject):
             self.import_preset(preset)
 
     @override
-    def update_filterstate(self, fs: FilterState):
-        fs.size = super().state()
+    @Slot()
+    def update_filterstate(self):
+        self._filter_state.size = super().state()
+        self.filterstate_changed.emit()
 
 
 class SizeFilterPresetEditDialog(PresetEditDialog[RangeFilterData]):
@@ -707,7 +754,7 @@ class SizeFilterPresetEditDialog(PresetEditDialog[RangeFilterData]):
 
     def __init__(self, parent: QWidget, name: str, preset: RangeFilterData | None):
         super().__init__(parent, name)
-        self._filter_obj = SizeFilterObject(self._filter_layout, self)
+        self._filter_obj = SizeFilterObject(self._filter_layout, FilterState(), self)
         if preset is not None:
             self._filter_obj.import_preset(preset)
 
@@ -723,6 +770,7 @@ class SizeFilterPresetDialog(AbstractPresetDialog[RangeFilterData]):
 
 
 class CountFilterObject(RangeFilterObject):
+    applied_everywhere: Signal = Signal(object)
     description: str = (
         "Filter out ranks and sizes/tags whose max entry is not within the given range."
     )
@@ -730,10 +778,11 @@ class CountFilterObject(RangeFilterObject):
     def __init__(
         self,
         layout: QGridLayout,
+        filter_state: FilterState,
         parent: QWidget,
         presets: dict[str, RangeFilterData] | None = None,
     ):
-        super().__init__("count", self.description, layout, parent, presets)
+        super().__init__("count", self.description, layout, filter_state, parent, presets)
 
     @override
     def _open_preset_dialogue(self):
@@ -743,15 +792,17 @@ class CountFilterObject(RangeFilterObject):
             self.import_preset(preset)
 
     @override
-    def update_filterstate(self, fs: FilterState):
-        fs.count = super().state()
+    @Slot()
+    def update_filterstate(self):
+        self._filter_state.count = super().state()
+        self.filterstate_changed.emit()
 
 class CountFilterPresetEditDialog(PresetEditDialog[RangeFilterData]):
     _filter_obj: CountFilterObject
 
     def __init__(self, parent: QWidget, name: str, preset: RangeFilterData | None):
         super().__init__(parent, name)
-        self._filter_obj = CountFilterObject(self._filter_layout, self)
+        self._filter_obj = CountFilterObject(self._filter_layout, FilterState(), self)
         if preset is not None:
             self._filter_obj.import_preset(preset)
 
@@ -787,12 +838,9 @@ class FilterPresets:
 
 class FilterView(QGroupBox):
     filters_changed: Signal = Signal()
-    filter_applied_globally: Signal = Signal(object)
     _size_filter: SizeFilterObject | None
     _count_filter: CountFilterObject | None
     _tags_filter: TagFilterObject | None
-    _apply_buttons: dict[QPushButton, FilterObjectBase]
-    _apply_everywhere_buttons: dict[QPushButton, FilterObjectBase]
     _filter_state: FilterState
     _layout: QGridLayout
     _presets: FilterPresets
@@ -809,94 +857,42 @@ class FilterView(QGroupBox):
     ):
         super().__init__("Filter", parent)
         self._presets = presets
-        self._apply_buttons = {}
-        self._apply_everywhere_buttons = {}
         self._filter_state = FilterState()
         self._layout = QGridLayout(self)
         if filter_types is None or FilterType.SIZE in filter_types:
             self._size_filter = SizeFilterObject(
-                self._layout, self, self._presets.size_presets
+                self._layout, self._filter_state, self, self._presets.size_presets
             )
-            self._add_filter_object(self._size_filter)
+            _ = self._size_filter.filterstate_changed.connect(self.filters_changed)
         else:
             self._size_filter = None
         if filter_types is None or FilterType.COUNT in filter_types:
             self._count_filter = CountFilterObject(
-                self._layout, self, self._presets.count_presets
+                self._layout, self._filter_state, self, self._presets.count_presets
             )
-            self._add_filter_object(self._count_filter)
+            _ = self._count_filter.filterstate_changed.connect(self.filters_changed)
         else:
             self._count_filter = None
         if filter_types is None or FilterType.TAGS in filter_types:
             self._tags_filter = TagFilterObject(
-                self._layout, self, self._presets.tags_presets
+                self._layout, self._filter_state, self, self._presets.tags_presets
             )
-            self._add_filter_object(self._tags_filter)
+            _ = self._tags_filter.filterstate_changed.connect(self.filters_changed)
         else:
             self._tags_filter = None
         self._layout.setRowStretch(self._layout.rowCount(), 1)
 
-    def _add_filter_object(self, object: FilterObjectBase):
-        r = self._layout.rowCount()
-        apply = QPushButton("Apply")
-        apply.setIcon(qta.icon("mdi6.check"))
-        apply_everywhere = QPushButton("Apply Everywhere")
-        apply_everywhere.setIcon(qta.icon("mdi6.check-all"))
-        self._layout.addWidget(apply, r, 0, 1, 5)
-        self._layout.addWidget(apply_everywhere, r + 1, 0, 1, 5)
-        _ = apply.clicked.connect(self._apply_filters)
-        _ = apply_everywhere.clicked.connect(self._apply_filter_everywhere)
-        self._apply_buttons[apply] = object
-        self._apply_everywhere_buttons[apply_everywhere] = object
+    def connect_filters(self, other: Self):
+        if self._tags_filter is not None and other._tags_filter is not None:
+            _ = self._tags_filter.applied_everywhere.connect(other._tags_filter.import_preset)
+        if self._size_filter is not None and other._size_filter is not None:
+            _ = self._size_filter.applied_everywhere.connect(other._size_filter.import_preset)
+        if self._count_filter is not None and other._count_filter is not None:
+            _ = self._count_filter.applied_everywhere.connect(other._count_filter.import_preset)
 
-    def _get_filter_for_sender(
-        self, sender: QObject, buttons_map: dict[QPushButton, FilterObjectBase]
-    ):
-        if type(sender) is not QPushButton:
-            raise TypeError(
-                "FilterView._apply_filter slot was not called by an apply button"
-            )
-        filter_object = buttons_map.get(sender)
-        if filter_object is None:
-            raise TypeError(
-                "FilterView._apply_filter slot was called by an unexpected apply button"
-            )
-        return filter_object
-
-    def _apply_filter_object(self, filter_object: FilterObjectBase):
-        filter_object.update_filterstate(self._filter_state)
+    @Slot()
+    def filter_changed(self):
         self.filters_changed.emit()
-
-    @Slot()
-    def _apply_filters(self):
-        sender = self.sender()
-        filter_object = self._get_filter_for_sender(sender, self._apply_buttons)
-        self._apply_filter_object(filter_object)
-
-    @Slot()
-    def _apply_filter_everywhere(self):
-        sender = self.sender()
-        filter_object = self._get_filter_for_sender(
-            sender, self._apply_everywhere_buttons
-        )
-        self.filter_applied_globally.emit(filter_object)
-        self._apply_filter_object(filter_object)
-
-    @Slot(object)
-    def apply_nonlocal_filter(self, filter_object: FilterObjectBase):
-        match filter_object:
-            case TagFilterObject():
-                if self._tags_filter is not None:
-                    self._tags_filter.copy_values(filter_object)
-            case SizeFilterObject():
-                if self._size_filter is not None:
-                    self._size_filter.copy_values(filter_object)
-            case CountFilterObject():
-                if self._count_filter is not None:
-                    self._count_filter.copy_values(filter_object)
-            case FilterObjectBase():
-                raise Exception("Unreachable!")
-        self._apply_filter_object(filter_object)
 
     def export_data(self):
         return FilterViewData(
