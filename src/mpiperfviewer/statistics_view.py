@@ -1,3 +1,4 @@
+import re
 from math import inf, isnan
 
 from mpiperfcli.parser import Component, WorldData
@@ -31,16 +32,24 @@ class StatisticsView(QGroupBox):
         self._num_items = 0
         component_data = world_data.components[component]
         self._layout = QGridLayout(self)
-        self.add_stat("#Nodes", f"{world_data.meta.num_nodes:,}")
-        self.add_stat("#MPI Processes", f"{world_data.meta.num_processes:,}")
-        self.add_stat("Total msg count", f"{component_data.total_msgs_sent:,}")
+        self.add_stat("#MPI Processes", world_data.meta.num_processes)
+        self.add_stat("#Cores", world_data.meta.num_cores)
+        self.add_stat("#NUMA Nodes", world_data.meta.num_numa)
+        self.add_stat("#Hardware Sockets", world_data.meta.num_sockets)
+        self.add_stat("#Nodes", world_data.meta.num_nodes)
+        self.add_stat("Total msg count", component_data.total_msgs_sent)
         self.add_stat(
             "Total msg size",
             si_str(float(component_data.total_bytes_sent)) + "B",
         )
-        self.add_stat("Wall time", str(world_data.wall_time))
+        # Cut out microseconds from format
+        self.add_stat("Wall time", re.sub(r".\d+$", "", str(world_data.wall_time)))
 
-    def add_stat(self, stat: str, value: str):
+    def add_stat(self, stat: str, value: str | int | None):
+        if value is None:
+            return
+        if isinstance(value, int):
+            value = f"{value:,}"
         self._layout.addWidget(QLabel(stat), self._num_items, 0)
         total_msg_sizes_label = QLabel(
             text=value,

@@ -105,12 +105,15 @@ type Component = str
 
 @dataclass
 class WorldMeta:
-    num_nodes: int
     num_processes: int
     mpi_runtime: str
     version: tuple[int, int, int]
     source_directory: Path
     components: frozenset[Component] = frozenset()
+    num_nodes: int | None = field(default=None)
+    num_cores: int | None = field(default=None)
+    num_numa: int | None = field(default=None)
+    num_sockets: int | None = field(default=None)
 
 
 def rankfile_name(i: int):
@@ -291,7 +294,6 @@ class WorldData:
             num_processes=0,
             mpi_runtime="",
             version=(0, 0, 0),
-            num_nodes=0,
             source_directory=world_path,
         )
         with self.open_rank(0) as rf0:
@@ -303,7 +305,6 @@ class WorldData:
 
     def parse_ranks(self):
         """Read data from rank files into multi-dimensional numpy arrays, which can then be used for plotting."""
-        hostnames = set[str]()
         wall_time = 0
 
         component_set = set[Component]()
@@ -311,7 +312,6 @@ class WorldData:
 
         for rank in range(self.meta.num_processes):
             with self.open_rank(rank) as sender_rf:
-                hostnames.add(sender_rf.general.hostname)
                 wall_time = max(wall_time, sender_rf.general.wall_time)
                 unparsed_localities.append(sender_rf.general.localities)
                 for peer in sender_rf.peers.values():
@@ -321,7 +321,6 @@ class WorldData:
 
         self.wall_time = timedelta(microseconds=wall_time // 1000)
         self.meta.components = frozenset(component_set)
-        self.meta.num_nodes = len(hostnames)
 
         n = self.meta.num_processes
         self.components = {}
@@ -333,6 +332,10 @@ class WorldData:
         numa_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.NUMA)
         socket_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.SOCKET)
         core_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.CORE)
+        self.meta.num_nodes = len(node_locality) if node_locality is not None else None
+        self.meta.num_cores = len(core_locality) if core_locality is not None else None
+        self.meta.num_numa = len(numa_locality) if numa_locality is not None else None
+        self.meta.num_sockets = len(socket_locality) if socket_locality is not None else None
 
         for rank in range(self.meta.num_processes):
             with self.open_rank(rank) as sender_rf:
