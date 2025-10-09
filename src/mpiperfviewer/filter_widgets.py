@@ -90,6 +90,7 @@ class AbstractPresetDialog[T](QDialog):
     _presets: dict[str, T]
     _apply_button: QPushButton
     _edit_button: QPushButton
+    _delete_button: QPushButton
 
     def __init__[U](
         self,
@@ -121,14 +122,16 @@ class AbstractPresetDialog[T](QDialog):
         self._edit_button.setEnabled(False)
         _ = self._edit_button.clicked.connect(self._edit_clicked)
         buttons_layout.addWidget(self._edit_button)
-        delete_button = QPushButton(self)
-        delete_button.setIcon(qta.icon("mdi6.delete"))
-        delete_button.setToolTip("Delete the selected preset.")
-        _ = delete_button.clicked.connect(self._remove_clicked)
-        buttons_layout.addWidget(delete_button)
+        self._delete_button = QPushButton(self)
+        self._delete_button.setIcon(qta.icon("mdi6.delete"))
+        self._delete_button.setToolTip("Delete the selected preset.")
+        self._delete_button.setEnabled(False)
+        _ = self._delete_button.clicked.connect(self._remove_clicked)
+        buttons_layout.addWidget(self._delete_button)
         buttons_layout.addStretch()
         footer_buttons = QHBoxLayout()
         self._apply_button = QPushButton("Apply")
+        self._apply_button.setEnabled(False)
         self._apply_button.setIcon(qta.icon("mdi6.check"))
         _ = self._apply_button.clicked.connect(self._apply_clicked)
         footer_buttons.addWidget(self._apply_button)
@@ -198,6 +201,7 @@ class AbstractPresetDialog[T](QDialog):
         items = self._list_widget.selectedItems()
         self._apply_button.setEnabled(len(items) == 1)
         self._edit_button.setEnabled(len(items) == 1)
+        self._delete_button.setEnabled(len(items) == 1)
 
     def _open_preset_edit_dialog(self, name: str, preset: T|None) -> tuple[bool, str, T]:
         raise Exception("Unimplemented!")
