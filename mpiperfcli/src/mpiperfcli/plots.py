@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Any, cast, override
 
 import numpy as np
-from matplotlib import colormaps
+from matplotlib import colormaps, ticker
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, LogNorm
 from matplotlib.figure import Figure
@@ -103,14 +103,17 @@ class MatrixPlotBase(PlotBase, ABC):
         self, matrix: UInt64Array[tuple[int, int]], separators: list[int] | None = None
     ):
         separators = separators or []
-        peers = list(range(self.group.msgs_sent.shape[0]))
         ax = self.fig.add_subplot()
-        ticks = np.arange(0, len(matrix))
 
         img = ax.imshow(matrix, self._cmap, norm="log")
         # TODO labels do not work correctly
-        _ = ax.set_xticks(ticks, labels=[str(r) for r in peers], minor=True)
-        _ = ax.set_yticks(ticks, labels=[str(r) for r in peers], minor=True)
+        # _ = ax.set_xticks(ticks, minor=False)
+        # _ = ax.set_yticks(ticks, minor=False)
+        loc = ticker.MaxNLocator('auto', integer=True, min_n_ticks=-1)
+        ax.xaxis.set_minor_locator(loc)
+        ax.xaxis.set_minor_locator(loc)
+        ax.yaxis.set_major_locator(loc)
+        ax.yaxis.set_major_locator(loc)
 
         cbar = self.fig.colorbar(img)
         _ = cbar.ax.set_ylabel(self._legend_label, rotation=-90, va="bottom")
