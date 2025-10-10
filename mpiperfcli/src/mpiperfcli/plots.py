@@ -105,7 +105,7 @@ class MatrixPlotBase(PlotBase, ABC):
         separators = separators or []
         ax = self.fig.add_subplot()
 
-        img = ax.imshow(matrix, self._cmap, norm="log")
+        img = ax.imshow(matrix, self._cmap, norm="log", interpolation="nearest")
         loc = ticker.MaxNLocator('auto', integer=True, min_n_ticks=-1)
         ax.xaxis.set_minor_locator(ticker.NullLocator())
         ax.yaxis.set_minor_locator(ticker.NullLocator())
@@ -301,7 +301,7 @@ class PixelPlotBase(ThreeDimPlotBase, ABC):
 
     def imshow(self, ax: Axes, occurances: NDArray[np.uint64], cmap: Colormap, filters: FilterState):
         cmap = self._get_cmap(cmap, filters)
-        img = ax.imshow(occurances, cmap=cmap, norm=self._get_norm(filters), aspect="auto")
+        img = ax.imshow(occurances, cmap=cmap, norm=self._get_norm(filters), aspect="auto", interpolation="nearest")
         return img
 
     @override
