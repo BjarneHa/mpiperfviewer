@@ -106,13 +106,10 @@ class MatrixPlotBase(PlotBase, ABC):
         ax = self.fig.add_subplot()
 
         img = ax.imshow(matrix, self._cmap, norm="log")
-        # TODO labels do not work correctly
-        # _ = ax.set_xticks(ticks, minor=False)
-        # _ = ax.set_yticks(ticks, minor=False)
         loc = ticker.MaxNLocator('auto', integer=True, min_n_ticks=-1)
-        ax.xaxis.set_minor_locator(loc)
-        ax.xaxis.set_minor_locator(loc)
-        ax.yaxis.set_major_locator(loc)
+        ax.xaxis.set_minor_locator(ticker.NullLocator())
+        ax.yaxis.set_minor_locator(ticker.NullLocator())
+        ax.xaxis.set_major_locator(loc)
         ax.yaxis.set_major_locator(loc)
 
         cbar = self.fig.colorbar(img)
@@ -156,8 +153,8 @@ class SizeMatrixPlot(MatrixPlotBase):
         meta: WorldMeta,
         component_data: ComponentData,
         group_by: MatrixGroupBy,
-        plot_title: str = "Communication Matrix (message size)",
-        legend_label: str = "messages sent",
+        plot_title: str = "Communication Matrix (total bytes sent)",
+        legend_label: str = "bytes sent",
         cmap: str = "Reds",
     ):
         super().__init__(
@@ -180,7 +177,7 @@ class SizeMatrixPlot(MatrixPlotBase):
 
     @override
     def tab_title(self) -> str:
-        return "total size"
+        return f"total size ({self._group_by})"
 
 
 class CountMatrixPlot(MatrixPlotBase):
@@ -190,7 +187,7 @@ class CountMatrixPlot(MatrixPlotBase):
         meta: WorldMeta,
         component_data: ComponentData,
         group_by: MatrixGroupBy,
-        plot_title: str = "Communication Matrix (message count)",
+        plot_title: str = "Communication Matrix (total messages sent)",
         legend_label: str = "messages sent",
         cmap: str = "Blues",
     ):
@@ -214,7 +211,7 @@ class CountMatrixPlot(MatrixPlotBase):
 
     @override
     def tab_title(self) -> str:
-        return "message count"
+        return f"message count ({self._group_by})"
 
 
 class RankPlotBase(PlotBase, ABC):
