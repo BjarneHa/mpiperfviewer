@@ -327,7 +327,7 @@ class TagsBar3DPlot(ThreeDimBarBase):
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
-        return [FilterType.COUNT, FilterType.TAGS]
+        return [FilterType.COUNT, FilterType.TAG]
 
     @override
     @classmethod
@@ -341,7 +341,7 @@ class TagsBar3DPlot(ThreeDimBarBase):
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self._data.occuring_tags,
             self._data.data,
-            filters.tags,
+            filters.tag,
             filters.count,
         )
 
@@ -381,7 +381,7 @@ class SizeBar3DPlot(ThreeDimBarBase):
     @override
     @classmethod
     def cli_name(cls) -> str:
-        return "size_3d"
+        return "sizes_3d"
 
     @override
     def draw_plot(self, filters: FilterState):
@@ -462,7 +462,7 @@ class TagsPixelPlot(PixelPlotBase):
     @override
     @classmethod
     def filter_types(cls) -> list[FilterType]:
-        return [FilterType.COUNT, FilterType.TAGS]
+        return [FilterType.COUNT, FilterType.TAG]
 
     @override
     @classmethod
@@ -475,7 +475,7 @@ class TagsPixelPlot(PixelPlotBase):
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self._data.occuring_tags,
             self._data.data,
-            filters.tags,
+            filters.tag,
             filters.count,
         )
 
@@ -512,7 +512,7 @@ class SizePixelPlot(PixelPlotBase):
     @override
     @classmethod
     def cli_name(cls) -> str:
-        return "size_px"
+        return "sizes_px"
 
     @override
     def draw_plot(self, filters: FilterState):

@@ -156,7 +156,7 @@ def create_parser():
                 for name, plot_class in chain(MATRIX_PLOTS.items(), RANK_PLOTS.items())
             ]
         )
-        + '. A FILTER is specified with a name and a comma-separated list of ranges and exact values. E.g. "tags:[-20;10],4,[12;14]". Note that for the count filter, only one range may be specified.',
+        + '. A FILTER is specified with a name and a comma-separated list of ranges and exact values. E.g. "tag:[-20;10],4,[12;14]". Note that for the count filter, only one range may be specified.',
         action="append",
     )
     return parser
@@ -229,8 +229,8 @@ def main():
                         filters[plot_class].count = range_filter
                     case FilterType.SIZE:
                         filters[plot_class].size = parse_filter(filter_text)
-                    case FilterType.TAGS:
-                        filters[plot_class].tags = parse_filter(filter_text)
+                    case FilterType.TAG:
+                        filters[plot_class].tag = parse_filter(filter_text)
             except ValueError as e:
                 print(
                     f'Error parsing "{filter_name}" for plot type "{plot_name}": {e}. Exiting...',

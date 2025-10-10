@@ -603,7 +603,7 @@ class TagFilterObject(FilterObjectBase[MultiRangeFilter|BadFilter|InvertedFilter
         self._presets = presets
         self._filter_state = filter_state
         tags_description = "Select specific ranges of tags to plot."
-        self._checkbox = QCheckBox("tags", parent)
+        self._checkbox = QCheckBox("tag", parent)
         self._checkbox.setToolTip(tags_description)
         _ = self._checkbox.checkStateChanged.connect(self._check_changed)
         r = layout.rowCount()
@@ -666,7 +666,7 @@ class TagFilterObject(FilterObjectBase[MultiRangeFilter|BadFilter|InvertedFilter
     @override
     @Slot()
     def update_filterstate(self):
-        self._filter_state.tags = self.state()
+        self._filter_state.tag = self.state()
         self.filterstate_changed.emit()
 
     def copy_values(self, other: "TagFilterObject"):
@@ -877,7 +877,7 @@ class FilterView(QGroupBox):
             _ = self._count_filter.filterstate_changed.connect(self.filters_changed)
         else:
             self._count_filter = None
-        if filter_types is None or FilterType.TAGS in filter_types:
+        if filter_types is None or FilterType.TAG in filter_types:
             self._tags_filter = TagFilterObject(
                 self._layout, self._filter_state, self, self._presets.tags_presets
             )

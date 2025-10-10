@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 
 
 class FilterType(Enum):
-    TAGS = 0
+    TAG = 0
     SIZE = 1
     COUNT = 2
 
@@ -211,13 +211,13 @@ class InvertedFilter(Filter):
 class FilterState:
     size: Filter = field(default_factory=lambda: Unfiltered())
     count: RangeFilter | Unfiltered = field(default_factory=lambda: Unfiltered())
-    tags: Filter = field(default_factory=lambda: Unfiltered())
+    tag: Filter = field(default_factory=lambda: Unfiltered())
 
     def cli_format(self):
         active_filters = list[str]()
         self._format_single_filter(active_filters, "size", self.size)
         self._format_single_filter(active_filters, "count", self.count)
-        self._format_single_filter(active_filters, "tags", self.tags)
+        self._format_single_filter(active_filters, "tag", self.tag)
         return "=".join(active_filters)
 
     def _format_single_filter(self, list: list[str], filter_name: str, filter: Filter):
