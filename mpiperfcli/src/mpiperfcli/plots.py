@@ -38,6 +38,10 @@ class RankPlotType(StrEnum):
     BAR3D = "3D Bar"
     BAR = "Bar Chart"
 
+SIZES_COLOR = (1, 0.85, 0, 1)
+TAGS_COLOR = (0, 0.5, 0, 1)
+HIDDEN_COLOR = (0, 0, 0, 0.15)
+
 
 class PlotBase(ABC):
     fig: Figure
@@ -291,7 +295,7 @@ class PixelPlotBase(ThreeDimPlotBase, ABC):
 
     def _get_cmap(self, cmap: Colormap, filters: FilterState):
         cmap = cmap.copy()
-        col = "0.7" # grayscale format
+        col = HIDDEN_COLOR # grayscale format
         if isinstance(filters.count, Unfiltered) or filters.count.min is None or filters.count.min < 1:
             cmap.set_extremes(over=col)
         else:
@@ -345,20 +349,26 @@ class TagsBar3DPlot(ThreeDimBarBase):
             filters.count,
         )
 
+        dz = tag_occurances.ravel()
+        zero_filter = dz > 0
+        dz = dz[zero_filter]
+
         _xx, _yy = np.meshgrid(xticks, yticks)
         x, y = _xx.ravel() - 0.4, _yy.ravel() - 0.4
-        z = np.zeros_like(x)
-        dx = np.ones_like(x) * 0.8
-        dy = np.ones_like(y) * 0.8
-        dz = tag_occurances.ravel()
+        x, y = x[zero_filter], y[zero_filter]
+        z = np.zeros_like(dz)
+        dx = dy = np.full_like(dz, 0.8, dtype=np.float64)
 
-        _ = ax.bar3d(x, y, z, dx, dy, dz, color="green")
+        colors = np.full((len(dz), 4), HIDDEN_COLOR)
+        colors[filters.count.apply(dz), :] = TAGS_COLOR
+
+        _ = ax.bar3d(x, y, z, dx, dy, dz, color=colors)
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)
-        _ = ax.set_xlabel("Rank")
-        _ = ax.set_ylabel("Tag")
-        _ = ax.set_zlabel("No. of messages")
-        _ = ax.set_title(f"Messages with tag to peer from Rank {self._rank}")
+        _ = ax.set_xlabel("MPI_COMM_WORLD rank of peer")
+        _ = ax.set_ylabel("Message tag")
+        _ = ax.set_zlabel("No. of messages sent")
+        _ = ax.set_title(f"Messages sent to peers from rank {self._rank} by tag")
 
     @override
     @classmethod
@@ -393,20 +403,25 @@ class SizeBar3DPlot(ThreeDimBarBase):
             filters.count,
         )
 
+        dz = size_occurances.ravel()
+        zero_filter = dz > 0
+        dz = dz[zero_filter]
+
         _xx, _yy = np.meshgrid(xticks, yticks)
         x, y = _xx.ravel() - 0.4, _yy.ravel() - 0.4
-        z = np.zeros_like(x)
-        dx = np.ones_like(x) * 0.8
-        dy = np.ones_like(y) * 0.8
-        dz = size_occurances.ravel()
+        x, y = x[zero_filter], y[zero_filter]
+        z = np.zeros_like(dz)
+        dx = dy = np.full_like(dz, 0.8, dtype=np.float64)
+        colors = np.full((len(dz), 4), HIDDEN_COLOR)
+        colors[filters.count.apply(dz), :] = SIZES_COLOR
 
-        _ = ax.bar3d(x, y, z, dx, dy, dz, color="gold")
+        _ = ax.bar3d(x, y, z, dx, dy, dz, color=colors)
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)
-        _ = ax.set_xlabel("MPI_COMM_WORLD Rank of peer")
-        _ = ax.set_ylabel("Size in Bytes")
-        _ = ax.set_zlabel("Messages sent")
-        _ = ax.set_title(f"Messages with size to peer from Rank {self._rank}")
+        _ = ax.set_xlabel("MPI_COMM_WORLD rank of peer")
+        _ = ax.set_ylabel("Message size in bytes")
+        _ = ax.set_zlabel("No. of messages sent")
+        _ = ax.set_title(f"Messages sent to peers from rank {self._rank} by message size")
 
     @override
     @classmethod
@@ -430,16 +445,16 @@ class Counts2DBarPlot(RankPlotBase):
         ax = self.fig.add_subplot()
         x = np.arange(0, self.world_meta.num_processes)
         y = self.component_data.by_rank.msgs_sent[self._rank, :]
-        count_filter = filters.count.apply(y)
+        count_filter = filters.count.apply(y) & (y > 0)
         x = x[count_filter]
         y = y[count_filter]
         xticks = np.arange(0, len(x))
 
-        _ = ax.bar(x, y, color="teal", width=0.8)
+        _ = ax.bar(xticks, y, color="teal", width=0.8)
         _ = ax.set_xticks(xticks, labels=x)
-        _ = ax.set_xlabel("MPI_COMM_WORLD Rank")
-        _ = ax.set_ylabel("Messages sent")
-        _ = ax.set_title(f"Messages sent to peers by Rank {self._rank}")
+        _ = ax.set_xlabel("MPI_COMM_WORLD rank of peer")
+        _ = ax.set_ylabel("No. of messages sent")
+        _ = ax.set_title(f"Messages sent to peers from rank {self._rank}")
 
     @override
     @classmethod
@@ -483,13 +498,13 @@ class TagsPixelPlot(PixelPlotBase):
 
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)
-        _ = ax.set_xlabel("peer MPI_COMM_WORLD Rank")
-        _ = ax.set_ylabel("Tag")
-        _ = ax.set_title(f"Messages with tags to peer from Rank {self._rank}")
+        _ = ax.set_xlabel("MPI_COMM_WORLD rank of peer")
+        _ = ax.set_ylabel("Message tag")
+        _ = ax.set_title(f"Messages sent to peers from rank {self._rank} by tag")
 
         cbar = self.fig.colorbar(img)
 
-        _ = cbar.ax.set_ylabel("Message count", rotation=-90, va="bottom")
+        _ = cbar.ax.set_ylabel("No. of messages sent", rotation=-90, va="bottom")
 
     @override
     @classmethod
@@ -528,13 +543,13 @@ class SizePixelPlot(PixelPlotBase):
 
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)
-        _ = ax.set_xlabel("MPI_COMM_WORLD Rank of peer")
-        _ = ax.set_ylabel("Size in Bytes")
-        _ = ax.set_title(f"Messages with size to peer from Rank {self._rank}")
+        _ = ax.set_xlabel("MPI_COMM_WORLD rank of peer")
+        _ = ax.set_ylabel("Message size in bytes")
+        _ = ax.set_title(f"Messages sent to peers from rank {self._rank} by message size")
 
         cbar = self.fig.colorbar(img)
 
-        _ = cbar.ax.set_ylabel("Message count", rotation=-90, va="bottom")
+        _ = cbar.ax.set_ylabel("No. of messages sent", rotation=-90, va="bottom")
 
     @override
     @classmethod

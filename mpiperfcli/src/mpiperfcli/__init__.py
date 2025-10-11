@@ -125,7 +125,7 @@ def create_parser():
         "--plot",
         help="Export the specified plot. You can specify the filename using the format PLOTTYPE=FILENAME."
         + f" The available plot types are {matrix_plots_list} and {rank_plots_list}."
-        + ' For rank-specific plots, RANK needs to be specified. RANK may be "*" to create plot for all ranks.'
+        + ' For rank-specific plots, RANK needs to be specified. RANK may be "*" to create plots for all ranks.'
         + f" For matrix plots, a grouping (one of {'/'.join(GROUPINGS)}) needs to be specified.",
         action="append",
     )
