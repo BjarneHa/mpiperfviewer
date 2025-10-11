@@ -362,6 +362,9 @@ class TagsBar3DPlot(ThreeDimBarBase):
         colors = np.full((len(dz), 4), HIDDEN_COLOR)
         colors[filters.count.apply(dz), :] = TAGS_COLOR
 
+        if isinstance(filters.count, RangeFilter) and filters.count.max is not None:
+            dz[dz > filters.count.max] = filters.count.max
+
         _ = ax.bar3d(x, y, z, dx, dy, dz, color=colors)
         _ = ax.set_xticks(xticks, labels=xlabels)
         _ = ax.set_yticks(yticks, labels=ylabels)
@@ -414,6 +417,8 @@ class SizeBar3DPlot(ThreeDimBarBase):
         dx = dy = np.full_like(dz, 0.8, dtype=np.float64)
         colors = np.full((len(dz), 4), HIDDEN_COLOR)
         colors[filters.count.apply(dz), :] = SIZES_COLOR
+        if isinstance(filters.count, RangeFilter) and filters.count.max is not None:
+            dz[dz > filters.count.max] = filters.count.max
 
         _ = ax.bar3d(x, y, z, dx, dy, dz, color=colors)
         _ = ax.set_xticks(xticks, labels=xlabels)
