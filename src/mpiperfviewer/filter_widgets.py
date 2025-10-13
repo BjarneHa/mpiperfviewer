@@ -3,15 +3,6 @@ from typing import Self, override
 
 import numpy as np
 import qtawesome as qta
-from mpiperfcli.filters import (
-    BadFilter,
-    FilterState,
-    FilterType,
-    InvertedFilter,
-    MultiRangeFilter,
-    RangeFilter,
-    Unfiltered,
-)
 from PySide6.QtCore import (
     QObject,
     Qt,
@@ -36,6 +27,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from serde import field, serde
+
+from mpiperfcli.filters import (
+    BadFilter,
+    FilterState,
+    FilterType,
+    InvertedFilter,
+    MultiRangeFilter,
+    RangeFilter,
+    Unfiltered,
+)
 
 
 class PresetEditDialog[T](QDialog):
@@ -453,20 +454,22 @@ class MultiRangeFilterWidget(QWidget):
         _ = self._line_edit.textChanged.connect(self._filter_line_changed)
         validator = QRegularExpressionValidator(MULTIRANGE_REGEXP)
         self._line_edit.setValidator(validator)
-        edit_layout = QHBoxLayout()
+        inputs_layout = QGridLayout()
         self._filter_status_btn = QPushButton(self, flat=True)
         _ = self._filter_status_btn.clicked.connect(self._status_btn_clicked)
         self._set_filter_status(ok=True)
-        layout.addLayout(edit_layout, 0, 0, 1, 2)
-        edit_layout.addWidget(self._line_edit)
-        edit_layout.addWidget(self._filter_status_btn)
-
-        layout.addWidget(QLabel("Collectives:"), 1, 0, 1, 1)
+        layout.addLayout(inputs_layout, 0, 0, 1, 2)
+        inputs_layout.addWidget(self._line_edit, 0, 0, 1, 2)
+        inputs_layout.addWidget(self._filter_status_btn, 0, 2)
+        inputs_layout.addWidget(QLabel("Collectives:"), 1, 0)
 
         self._button = QPushButton("Edit", self)
         self._button.setIcon(qta.icon("mdi6.pencil"))
         _ = self._button.pressed.connect(self.edit_pressed)
-        layout.addWidget(self._button, 1, 1, 1, 1)
+        inputs_layout.addWidget(self._button, 1, 1)
+        inputs_layout.setColumnStretch(0, 1)
+        inputs_layout.setColumnStretch(1, 1)
+        inputs_layout.setColumnStretch(2, 0)
 
         self._collectives = CollectivesDialog(self)
         _ = self._collectives.checked.connect(self._collectives_checked)
