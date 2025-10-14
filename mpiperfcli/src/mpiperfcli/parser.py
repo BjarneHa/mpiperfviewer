@@ -1,4 +1,3 @@
-import tracemalloc
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
@@ -331,6 +330,12 @@ class WorldData:
         self.wall_time = timedelta(microseconds=wall_time // 1000)
         self.meta.components = frozenset(component_set)
 
+        n = self.meta.num_processes
+        self.components = {}
+        for c in self.meta.components:
+            cd = ComponentData(c, n, self)
+            self.components[c] = cd
+
         node_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.NODE)
         numa_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.NUMA)
         socket_locality = self._get_localities_from_rfs(unparsed_localities, LocalityType.SOCKET)
@@ -339,14 +344,6 @@ class WorldData:
         self.meta.num_cores = len(core_locality) if core_locality is not None else None
         self.meta.num_numa = len(numa_locality) if numa_locality is not None else None
         self.meta.num_sockets = len(socket_locality) if socket_locality is not None else None
-
-        tracemalloc.start()
-
-        n = self.meta.num_processes
-        self.components = {}
-        for c in self.meta.components:
-            cd = ComponentData(c, n, self)
-            self.components[c] = cd
 
         for rank in range(self.meta.num_processes):
             with self.open_rank(rank) as sender_rf:
@@ -374,11 +371,6 @@ class WorldData:
             comp.by_socket = comp.by_rank.regroup(socket_locality)
             comp.by_node = comp.by_rank.regroup(node_locality)
             comp.by_core = comp.by_rank.regroup(core_locality)
-
-        snapshot = tracemalloc.take_snapshot()
-        print(f"Total number of bytes allocated: {sum([traceback.size for traceback in snapshot.statistics('lineno')])}")
-        for traceback in snapshot.statistics('lineno'):
-            print(traceback)
 
     def _parse_locality(self, rank: int, localities: list[RankLocality], type: LocalityType):
         found = None
