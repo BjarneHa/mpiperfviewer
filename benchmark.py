@@ -13,13 +13,11 @@ def total_numpy_size(cd: ComponentData):
         mats.append(cd.by_socket)
     if cd.by_node is not None:
         mats.append(cd.by_node)
-    _sizes_data = [cd.sizes(i) for i in range(5)]
-    _tags_data = [cd.tags(i) for i in range(5)]
-    matrices_size = sum([m.msgs_sent.nbytes + m.total_sent.nbytes for m in mats])
-    tags_data_size = sum([t.data.nbytes for t in cd._tags_data_list])
-    sizes_data_size = sum([s.data.nbytes for s in cd._size_data_list])
-    occuring_tags_size = sum([t.occuring_tags.nbytes for t in cd._tags_data_list])
-    occuring_sizes_size = sum([s.occuring_sizes.nbytes for s in cd._size_data_list])
+    matrices_size = sum([m.msgs_sent.nbytes + m.bytes_sent.nbytes for m in mats])
+    tags_data_size = cd.tags.nbytes
+    sizes_data_size = cd.sizes.nbytes
+    occuring_tags_size = cd.occuring_tags.nbytes
+    occuring_sizes_size = cd.occuring_sizes.nbytes
     total = (
         matrices_size
         + tags_data_size
