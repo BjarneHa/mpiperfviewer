@@ -14,6 +14,7 @@ from mpiperfviewer.project_state import (
 )
 from mpiperfviewer.project_view import ProjectView
 
+FILE_EXTENSION = "mpipcproj"
 
 class MainWindow(QMainWindow):
     current_project_file: Path | None
@@ -74,7 +75,7 @@ class MainWindow(QMainWindow):
             self,
             "Open Project",
             "",
-            "mpiperfviewer Project (*.mpipproj);;All files (*)",
+            f"mpiperfviewer Project (*.{FILE_EXTENSION});;All files (*)",
         )
         if save_name == "":
             return
@@ -116,7 +117,7 @@ class MainWindow(QMainWindow):
             self,
             "Save Project as",
             "",
-            "mpiperfviewer Project (*.mpipproj);;All files (*)",
+            f"mpiperfviewer Project (*.{FILE_EXTENSION});;All files (*)",
         )
         if save_name == "":
             return
