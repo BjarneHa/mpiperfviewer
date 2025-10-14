@@ -101,7 +101,7 @@ class MatrixPlotBase(PlotBase, ABC):
         self, matrix: UInt64Array[tuple[int, int]], separators: list[int] | None = None
     ):
         separators = separators or []
-        peers = list(range(self.group.count.shape[0]))
+        peers = list(range(self.group.msgs_sent.shape[0]))
         ax = self.fig.add_subplot()
         ticks = np.arange(0, len(matrix))
 
@@ -166,15 +166,7 @@ class SizeMatrixPlot(MatrixPlotBase):
 
     @override
     def init_plot(self, filters: FilterState):
-        matrix_dims = self.group.sizes.shape[:2]
-        matrix = np.zeros(matrix_dims, dtype=np.uint64).view()
-        for sender in range(matrix_dims[0]):
-            for receiver in range(matrix_dims[1]):
-                for i, size in enumerate(self.component_data.occuring_sizes):
-                    matrix[sender, receiver] += (
-                        size * self.group.sizes[sender, receiver, i]
-                    )
-        self.plot_matrix(matrix)
+        self.plot_matrix(self.group.bytes_sent)
 
     @override
     @classmethod
@@ -208,7 +200,7 @@ class CountMatrixPlot(MatrixPlotBase):
 
     @override
     def init_plot(self, filters: FilterState):
-        self.plot_matrix(self.group.count)
+        self.plot_matrix(self.group.msgs_sent)
 
     @override
     @classmethod
@@ -271,7 +263,7 @@ class ThreeDimPlotBase(RankPlotBase, ABC):
         # Applies count filter (after size/tags filter, perhaps this should be changable)
         procs = np.arange(0, self.world_meta.num_processes, dtype=np.uint64)
         procs_count_filter_array = (
-            self.component_data.by_rank.count[self._rank, :] > 0
+            self.component_data.by_rank.msgs_sent[self._rank, :] > 0
         ) & (filtered_occurances.sum(1, dtype=np.bool))
         metric_count_filter_array = filtered_occurances.sum(0, dtype=np.bool)
         procs = procs[procs_count_filter_array]
@@ -324,7 +316,7 @@ class TagsBar3DPlot(ThreeDimBarBase):
         component_data = self.component_data
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             component_data.occuring_tags,
-            component_data.by_rank.tags,
+            component_data.tags,
             filters.tags,
             filters.count,
         )
@@ -366,7 +358,7 @@ class SizeBar3DPlot(ThreeDimBarBase):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_sizes,
-            self.component_data.by_rank.sizes,
+            self.component_data.sizes,
             filters.size,
             filters.count,
         )
@@ -407,7 +399,7 @@ class Counts2DBarPlot(RankPlotBase):
     def init_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         x = np.arange(0, self.world_meta.num_processes)
-        y = self.component_data.by_rank.count[self._rank, :]
+        y = self.component_data.by_rank.msgs_sent[self._rank, :]
         count_filter = filters.count.apply(y)
         x = x[count_filter]
         y = y[count_filter]
@@ -446,7 +438,7 @@ class TagsPixelPlot(PixelPlotBase):
         ax = self.fig.add_subplot()
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_tags,
-            self.component_data.by_rank.tags,
+            self.component_data.tags,
             filters.tags,
             filters.count,
         )
@@ -487,7 +479,7 @@ class SizePixelPlot(PixelPlotBase):
         ax = self.fig.add_subplot()
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
             self.component_data.occuring_sizes,
-            self.component_data.by_rank.sizes,
+            self.component_data.sizes,
             filters.size,
             filters.count,
         )
