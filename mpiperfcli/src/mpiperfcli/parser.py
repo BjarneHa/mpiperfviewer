@@ -4,7 +4,6 @@ from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
-from weakref import WeakValueDictionary
 
 import numpy as np
 from serde import deserialize, field, from_dict
@@ -228,8 +227,8 @@ class ComponentData:
     by_node: GroupedMatrices | None = None
     total_bytes_sent: int
     total_msgs_sent: int
-    _size_data_list: WeakValueDictionary[int, SizeData]
-    _tags_data_list: WeakValueDictionary[int, TagData]
+    _size_data_list: list[SizeData]
+    _tags_data_list: list[TagData]
     _world_data: "WorldData"
 
     def __init__(
@@ -240,8 +239,8 @@ class ComponentData:
     ):
         self.name = name
         self._world_data = world_data
-        self._size_data_list = WeakValueDictionary()
-        self._tags_data_list = WeakValueDictionary()
+        self._size_data_list = list()
+        self._tags_data_list = list()
         n = num_processes
 
         self.by_rank = GroupedMatrices.create_empty(n)
@@ -249,22 +248,10 @@ class ComponentData:
         self.total_msgs_sent = 0
 
     def tags(self, rank: int):
-        lazy_data = self._tags_data_list.get(rank)
-        if lazy_data is not None:
-            return lazy_data
-        with self._world_data.open_rank(rank) as sender_rf:
-            data = TagData.from_rf(sender_rf, self.name)
-            self._tags_data_list[rank] = data
-            return data
+        return self._tags_data_list[rank]
 
     def sizes(self, rank: int):
-         lazy_data = self._size_data_list.get(rank)
-         if lazy_data is not None:
-             return lazy_data
-         with self._world_data.open_rank(rank) as sender_rf:
-             data = SizeData.from_rf(sender_rf, self.name)
-             self._size_data_list[rank] = data
-             return data
+        return self._size_data_list[rank]
 
 class WorldData:
     meta: WorldMeta
@@ -371,6 +358,12 @@ class WorldData:
             comp.by_socket = comp.by_rank.regroup(socket_locality)
             comp.by_node = comp.by_rank.regroup(node_locality)
             comp.by_core = comp.by_rank.regroup(core_locality)
+
+        for rank in range(self.meta.num_processes):
+            for comp in self.components.values():
+                with self.open_rank(rank) as sender_rf:
+                    comp._tags_data_list.append(TagData.from_rf(sender_rf, comp.name))
+                    comp._size_data_list.append(SizeData.from_rf(sender_rf, comp.name))
 
     def _parse_locality(self, rank: int, localities: list[RankLocality], type: LocalityType):
         found = None

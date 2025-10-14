@@ -17,11 +17,11 @@ def total_numpy_size(cd: ComponentData):
     _sizes_data = [cd.sizes(i) for i in range(5)]
     _tags_data = [cd.tags(i) for i in range(5)]
     matrices_size = sum([m.msgs_sent.nbytes + m.total_sent.nbytes for m in mats])
-    tags_data_size = sum([t.data.nbytes for t in cd._tags_data_list.values()])
-    sizes_data_size = sum([s.data.nbytes for s in cd._size_data_list.values()])
-    occuring_tags_size = sum([t.occuring_tags.nbytes for t in cd._tags_data_list.values()])
-    occuring_sizes_size = sum([s.occuring_sizes.nbytes for s in cd._size_data_list.values()])
-    peers_size = sum([data.peers.nbytes for data in chain(cd._size_data_list.values(), cd._tags_data_list.values())])
+    tags_data_size = sum([t.data.nbytes for t in cd._tags_data_list])
+    sizes_data_size = sum([s.data.nbytes for s in cd._size_data_list])
+    occuring_tags_size = sum([t.occuring_tags.nbytes for t in cd._tags_data_list])
+    occuring_sizes_size = sum([s.occuring_sizes.nbytes for s in cd._size_data_list])
+    peers_size = sum([data.peers.nbytes for data in chain(cd._size_data_list, cd._tags_data_list)])
     total = (
         matrices_size
         + tags_data_size
