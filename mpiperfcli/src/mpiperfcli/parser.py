@@ -157,11 +157,13 @@ class GroupedMatrices:
 class SizeData:
     rank: int
     occuring_sizes: UInt64Array[tuple[int]]
+    peers: UInt64Array[tuple[int]]
     data: UInt64Array[tuple[int, int]]
 
     @staticmethod
     def from_rf(sender_rf: RankFile, component_name: Component):
         occuring_sizes_set = set[int]()
+        peers = np.array(list(sender_rf.peers.keys()), dtype=np.uint64).ravel()
         for recipient, peer in sender_rf.peers.items():
             if recipient >= sender_rf.general.num_procs:
                 raise ValueError(
@@ -173,42 +175,48 @@ class SizeData:
         occuring_sizes = np.array(list(occuring_sizes_set)).ravel() # ravel is only relevant for type hints
         occuring_sizes.sort()
         size_to_idx_map = {size: i for i, size in enumerate(occuring_sizes)}
-        data = np.zeros((sender_rf.general.num_procs, len(occuring_sizes)), np.uint64)
+        recipient_to_idx_map = {int(peer): i for i, peer in enumerate(peers)}
+        data = np.zeros((len(peers), len(occuring_sizes)), np.uint64)
         for recipient, peer in sender_rf.peers.items():
+            recipient_idx = recipient_to_idx_map[recipient]
             for callsite in peer.sent_messages.get(component_name, []):
                 for msg in callsite.msgs:
-                    size_index = size_to_idx_map[msg.size]
-                    data[recipient, size_index] += sum(msg.tags.values())
-        return SizeData(sender_rf.general.own_rank, occuring_sizes, data)
+                    size_idx = size_to_idx_map[msg.size]
+                    data[recipient_idx, size_idx] += sum(msg.tags.values())
+        return SizeData(sender_rf.general.own_rank, occuring_sizes, peers, data)
 
 @dataclass
 class TagData:
     rank: int
     occuring_tags: UInt64Array[tuple[int]]
+    peers: UInt64Array[tuple[int]]
     data: UInt64Array[tuple[int, int]]
 
     @staticmethod
     def from_rf(sender_rf: RankFile, component_name: Component):
         occuring_tags_set = set[int]()
-        for recipient, peer in sender_rf.peers.items():
+        peers = np.array(list(sender_rf.peers.keys()), dtype=np.uint64).ravel()
+        for recipient, peer_data in sender_rf.peers.items():
             if recipient >= sender_rf.general.num_procs:
                 raise ValueError(
                     f"Invalid peer {recipient}>=num_proc for rank {sender_rf.general.own_rank}."
                 )
-            for callsite in peer.sent_messages.get(component_name, []):
+            for callsite in peer_data.sent_messages.get(component_name, []):
                 for msg in callsite.msgs:
                     occuring_tags_set.update(msg.tags.keys())
         occuring_tags = np.array(list(occuring_tags_set)).ravel() # ravel is only relevant for type hints
         occuring_tags.sort()
         tags_to_idx_map = {tag: i for i, tag in enumerate(occuring_tags)}
-        data = np.zeros((sender_rf.general.num_procs, len(occuring_tags)), np.uint64)
-        for recipient, peer in sender_rf.peers.items():
-            for callsite in peer.sent_messages.get(component_name, []):
+        recipient_to_idx_map = {int(peer): i for i, peer in enumerate(peers)}
+        data = np.zeros((len(peers), len(occuring_tags)), np.uint64)
+        for recipient, peer_data in sender_rf.peers.items():
+            recipient_idx = recipient_to_idx_map[recipient]
+            for callsite in peer_data.sent_messages.get(component_name, []):
                 for msg in callsite.msgs:
                     for tag, occurances in msg.tags.items():
-                        tag_index = tags_to_idx_map[tag]
-                        data[recipient, tag_index] += occurances
-        return TagData(sender_rf.general.own_rank, occuring_tags, data)
+                        tag_idx = tags_to_idx_map[tag]
+                        data[recipient_idx, tag_idx] += occurances
+        return TagData(sender_rf.general.own_rank, occuring_tags, peers, data)
 
 
 class ComponentData:

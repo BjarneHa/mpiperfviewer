@@ -247,6 +247,7 @@ class RankPlotBase(PlotBase, ABC):
 class ThreeDimPlotBase(RankPlotBase, ABC):
     def generate_3d_data(
         self,
+        peers: UInt64Array[tuple[int]],
         metrics_legend: NDArray[Any],
         data: UInt64Array[tuple[int, int]],
         legend_filter: Filter,
@@ -265,22 +266,19 @@ class ThreeDimPlotBase(RankPlotBase, ABC):
 
         # Only show procs that are actually communicated with
         # Applies count filter (after size/tags filter, perhaps this should be changable)
-        procs = np.arange(0, self.world_meta.num_processes, dtype=np.uint64)
-        procs_count_filter_array = (
-            self.component_data.by_rank.msgs_sent[self._rank, :] > 0
-        ) & (filtered_occurances.sum(1, dtype=np.bool))
+        procs_count_filter_array = filtered_occurances.sum(1, dtype=np.bool)
         metric_count_filter_array = filtered_occurances.sum(0, dtype=np.bool)
-        procs = procs[procs_count_filter_array]
+        peers = peers[procs_count_filter_array].ravel()
         metric = metric[metric_count_filter_array]
         occurances = occurances[procs_count_filter_array, :][
             :, metric_count_filter_array
         ]
 
         # Collect data from collected dict into lists for plot
-        xticks = np.arange(0, len(procs))
+        xticks = np.arange(0, len(peers))
         yticks = np.arange(0, len(metric))
 
-        return (occurances.T, xticks, yticks, procs, metric)
+        return (occurances.T, xticks, yticks, peers, metric)
 
 
 class PixelPlotBase(ThreeDimPlotBase, ABC):
@@ -343,6 +341,7 @@ class TagsBar3DPlot(ThreeDimBarBase):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
 
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
+            self._data.peers,
             self._data.occuring_tags,
             self._data.data,
             filters.tag,
@@ -400,6 +399,7 @@ class SizeBar3DPlot(ThreeDimBarBase):
     def draw_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
+            self._data.peers,
             self._data.occuring_sizes,
             self._data.data,
             filters.size,
@@ -493,6 +493,7 @@ class TagsPixelPlot(PixelPlotBase):
     def draw_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
+            self._data.peers,
             self._data.occuring_tags,
             self._data.data,
             filters.tag,
@@ -538,6 +539,7 @@ class SizePixelPlot(PixelPlotBase):
     def draw_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
         size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
+            self._data.peers,
             self._data.occuring_sizes,
             self._data.data,
             filters.size,
