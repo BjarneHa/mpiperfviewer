@@ -270,9 +270,7 @@ class ThreeDimPlotBase(RankPlotBase, ABC):
         metric_count_filter_array = filtered_occurances.sum(0, dtype=np.bool)
         peers = peers[procs_count_filter_array].ravel()
         metric = metric[metric_count_filter_array]
-        occurances = occurances[procs_count_filter_array, :][
-            :, metric_count_filter_array
-        ]
+        occurances = occurances[np.ix_(procs_count_filter_array, metric_count_filter_array)]
 
         # Collect data from collected dict into lists for plot
         xticks = np.arange(0, len(peers))
