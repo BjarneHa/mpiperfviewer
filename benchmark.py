@@ -1,7 +1,13 @@
+import statistics
+import timeit
 from itertools import chain
 from pathlib import Path
 
+import matplotlib
+from matplotlib.figure import Figure
+from mpiperfcli.filters import FilterState
 from mpiperfcli.parser import ComponentData, GroupedMatrices, WorldData
+from mpiperfcli.plots import SizePixelPlot
 
 
 def total_numpy_size(cd: ComponentData):
@@ -40,4 +46,36 @@ def total_numpy_size(cd: ComponentData):
 
 
 wd = WorldData(Path("./testdata"))
-total_numpy_size(wd.components["mtl"])
+cd = wd.components["mtl"]
+total_numpy_size(cd)
+
+
+matplotlib.use("qtagg")
+plot = SizePixelPlot(Figure(), wd.meta, cd, 0)
+fs = FilterState()
+
+def generate_data():
+    data = cd.sizes(0)
+    _ = plot.generate_3d_data(
+        data.peers,
+        data.occuring_sizes,
+        data.data,
+        fs.tag,
+        fs.count,
+    )
+
+
+
+def do_draw():
+    plot = SizePixelPlot(Figure(), wd.meta, cd, 0)
+    plot.draw_plot(fs)
+    plot.fig.canvas.draw()
+
+generation_time = timeit.repeat(generate_data, number=1, repeat=10**6)
+draw_time = timeit.repeat(stmt=do_draw, number=1, repeat=1000)
+
+avg_gen = statistics.mean(generation_time)
+avg_draw = statistics.mean(draw_time)
+
+print(f"Data generation took {avg_gen} seconds on average.")
+print(f"Draw call took {avg_draw} seconds on average.")
