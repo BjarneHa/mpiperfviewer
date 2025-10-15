@@ -1,7 +1,14 @@
+import statistics
+import timeit
 from itertools import chain
 from pathlib import Path
+from weakref import WeakValueDictionary
 
+import matplotlib
+from matplotlib.figure import Figure
+from mpiperfcli.filters import FilterState
 from mpiperfcli.parser import ComponentData, GroupedMatrices, WorldData
+from mpiperfcli.plots import SizePixelPlot
 
 
 def total_numpy_size(cd: ComponentData):
@@ -40,4 +47,53 @@ def total_numpy_size(cd: ComponentData):
 
 
 wd = WorldData(Path("./testdata"))
-total_numpy_size(wd.components["mtl"])
+cd = wd.components["mtl"]
+total_numpy_size(cd)
+
+matplotlib.use("qtagg")
+plot = SizePixelPlot(Figure(), wd.meta, cd, 0)
+fs = FilterState()
+
+def generate_data():
+    data = cd.sizes(0)
+    _ = plot.generate_3d_data(
+        data.peers,
+        data.occuring_sizes,
+        data.data,
+        fs.tag,
+        fs.count,
+    )
+
+
+def clear_weak_refs():
+    cd._size_data_list = WeakValueDictionary()
+
+
+def do_draw():
+    plot = SizePixelPlot(Figure(), wd.meta, cd, 0)
+    plot.draw_plot(fs)
+    plot.fig.canvas.draw()
+
+generation_time_sizecached = timeit.repeat(generate_data, number=1, repeat=10**5)
+draw_time_sizecached = timeit.repeat(stmt=do_draw, number=1, repeat=1000)
+generation_time_rfcached = timeit.repeat(generate_data, setup=clear_weak_refs, number=1, repeat=10**5)
+draw_time_rfcached = timeit.repeat(stmt=do_draw, setup=clear_weak_refs, number=1, repeat=1000)
+
+avg_gen_sizecached = statistics.mean(generation_time_sizecached)
+avg_gen_rfcached = statistics.mean(generation_time_rfcached)
+avg_draw_sizecached = statistics.mean(draw_time_sizecached)
+avg_draw_rfcached = statistics.mean(draw_time_rfcached)
+
+print(f"Data generation took {avg_gen_sizecached} seconds on average when SizeData was cached.")
+print(f"Data generation took {avg_gen_rfcached} seconds on average when parsed RankFile was cached.")
+print(f"Draw call took {avg_draw_sizecached} seconds on average when SizeData was cached.")
+print(f"Draw call took {avg_draw_rfcached} seconds on average when parsed RankFile was cached.")
+
+# Disable cache
+wd._rank_file_cache = None
+generation_time_uncached = timeit.repeat(generate_data, setup=clear_weak_refs, number=1, repeat=1000)
+draw_time_uncached = timeit.repeat(stmt=do_draw, setup=clear_weak_refs, number=1, repeat=1000)
+avg_gen_rfcached = statistics.mean(generation_time_uncached)
+avg_draw_uncached = statistics.mean(draw_time_uncached)
+print(f"Data generation took {avg_gen_rfcached} seconds on average when parsed RankFile was not cached.")
+print(f"Draw call took {avg_draw_uncached} seconds on average when parsed RankFile was not cached.")
