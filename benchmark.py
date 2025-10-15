@@ -4,6 +4,8 @@ from mpiperfcli.parser import ComponentData, GroupedMatrices, WorldData
 
 
 def total_numpy_size(cd: ComponentData):
+    print(f"Num unique tags: {cd.occuring_tags.size}")
+    print(f"Num unique sizes: {cd.occuring_sizes.size}")
     mats = list[GroupedMatrices]()
     if cd.by_core is not None:
         mats.append(cd.by_core)
