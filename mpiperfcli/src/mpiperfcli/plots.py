@@ -262,7 +262,7 @@ class ThreeDimPlotBase(RankPlotBase, ABC):
 
         # `.sum(DIM, dtype=np.bool)` is equivalent to an OR-Operation and
         # is used to filter out irrelevant rows and columns in the graph
-        filtered_occurances = count_filter.apply(occurances)
+        filtered_occurances = count_filter.apply(occurances) & (occurances > 0)
 
         # Only show procs that are actually communicated with
         # Applies count filter (after size/tags filter, perhaps this should be changable)
