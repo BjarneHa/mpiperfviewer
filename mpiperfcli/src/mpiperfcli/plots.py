@@ -500,7 +500,7 @@ class TagsPixelPlot(PixelPlotBase):
 
         img = self.imshow(ax, tag_occurances, colormaps["Greens"], filters)
 
-        _ = ax.set_xticks(xticks, labels=xlabels)
+        _ = ax.set_xticks(xticks, labels=xlabels, rotation=-90)
         _ = ax.set_yticks(yticks, labels=ylabels)
         _ = ax.set_xlabel("MPI_COMM_WORLD rank of peer")
         _ = ax.set_ylabel("Message tag")
@@ -546,7 +546,7 @@ class SizePixelPlot(PixelPlotBase):
 
         img = self.imshow(ax, size_occurances, colormaps["Oranges"], filters)
 
-        _ = ax.set_xticks(xticks, labels=xlabels)
+        _ = ax.set_xticks(xticks, labels=xlabels, rotation=-90)
         _ = ax.set_yticks(yticks, labels=ylabels)
         _ = ax.set_xlabel("MPI_COMM_WORLD rank of peer")
         _ = ax.set_ylabel("Message size in bytes")
