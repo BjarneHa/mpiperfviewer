@@ -1,5 +1,6 @@
 import statistics
 import timeit
+import tracemalloc
 from itertools import chain
 from pathlib import Path
 from weakref import WeakValueDictionary
@@ -45,10 +46,30 @@ def total_numpy_size(cd: ComponentData):
     print("peers_size", peers_size)
     print("total", total)
 
+tracemalloc.start()
 
 wd = WorldData(Path("./testdata"))
 cd = wd.components["mtl"]
 total_numpy_size(cd)
+
+snapshot = tracemalloc.take_snapshot()
+for data in snapshot.statistics('lineno')[:10]:
+    print(data)
+
+nums_sizes = []
+nums_tags = []
+nums_peers = []
+for i in range(wd.meta.num_processes):
+    nums_sizes.append(cd.sizes(i).occuring_sizes.size)
+    nums_peers.append(cd.sizes(i).peers.size)
+    nums_tags.append(cd.tags(i).occuring_tags.size)
+
+avg_sizes = statistics.mean(nums_sizes)
+avg_tags = statistics.mean(nums_tags)
+avg_peers = statistics.mean(nums_peers)
+print(f"Avg sizes {avg_sizes}")
+print(f"Avg tags {avg_tags}")
+print(f"Avg peers {avg_peers}")
 
 matplotlib.use("qtagg")
 plot = SizePixelPlot(Figure(), wd.meta, cd, 0)

@@ -11,7 +11,7 @@ from serde import deserialize, field, from_dict
 from serde.toml import from_toml
 
 # If more rank files are part of WorldData, they are not cached
-RANK_FILE_CACHE_THRESHOLD = 500
+RANK_FILE_CACHE_THRESHOLD = 0
 
 class LocalityType(StrEnum):
     CORE = "hwcore"
