@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from serde import serde
+from serde import field, serde
 
 from mpiperfcli import create_plot_from_plot_and_param
 from mpiperfviewer.create_views import (
@@ -187,11 +187,11 @@ class PlotWidget(QWidget):
 
 @serde
 class ProjectData:
-    source_directory: Path | None
-    component: str | None
-    tab_plots: list[PlotWidgetExportData]
-    detached_plots: list[PlotWidgetExportData]
-    presets: FilterPresets
+    source_directory: Path | None = field(default=None)
+    component: str | None = field(default=None)
+    tab_plots: list[PlotWidgetExportData] = field(default_factory=lambda : list[PlotWidgetExportData]())
+    detached_plots: list[PlotWidgetExportData] = field(default_factory=lambda : list[PlotWidgetExportData]())
+    presets: FilterPresets = field(default_factory = lambda : FilterPresets())
 
 
 class PlotViewer(QGroupBox):

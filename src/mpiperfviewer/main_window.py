@@ -2,7 +2,13 @@ from pathlib import Path
 
 from PySide6.QtCore import Slot
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QMainWindow,
+    QMessageBox,
+)
+from mpiperfviewer.start_dialog import FILE_EXTENSION, StartDialog
 from serde.json import from_json, to_json
 
 from mpiperfviewer.filter_widgets import FilterPresets
@@ -13,8 +19,6 @@ from mpiperfviewer.project_state import (
     project_updated,
 )
 from mpiperfviewer.project_view import ProjectView
-
-FILE_EXTENSION = "mpipcproj"
 
 class MainWindow(QMainWindow):
     current_project_file: Path | None
@@ -35,10 +39,25 @@ class MainWindow(QMainWindow):
             source_dir = Path(args[0])
         if len(args) > 1:
             component = args[1]
+
+        self._setup_menubar()
+
+        if source_dir is None:
+            action, path = StartDialog.get_choice(self)
+            path = Path(path)
+            match action:
+                case StartDialog.Choice.NEW_PROJECT:
+                    self.setCentralWidget(ProjectView(ProjectData(source_directory=path)))
+                case StartDialog.Choice.OPEN_PROJECT:
+                    self._open_project_from_path(path)
+            return
+
         app_window = ProjectView(
             ProjectData(source_dir, component, [], [], FilterPresets())
         )
         self.setCentralWidget(app_window)
+
+    def _setup_menubar(self):
         menu_bar = self.menuBar()
         project_menu = menu_bar.addMenu("Project")
         new_action = project_menu.addAction("New Project")
@@ -79,14 +98,17 @@ class MainWindow(QMainWindow):
         )
         if save_name == "":
             return
-        with open(save_name, "r") as f:
+        self._open_project_from_path(Path(save_name))
+
+    def _open_project_from_path(self, path: Path):
+        with open(path, "r") as f:
             data = f.read()
         project_data = from_json(ProjectData, data)
         self.hide()
         _ = self.takeCentralWidget()
         app_window = ProjectView(project_data)
         self.setCentralWidget(app_window)
-        self.current_project_file = Path(save_name)
+        self.current_project_file = path
         self.show()
         project_saved()
 
