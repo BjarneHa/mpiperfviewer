@@ -913,10 +913,7 @@ class FilterView(QGroupBox):
     def import_preset(self, preset: FilterViewData):
         if preset.size_preset is not None and self._size_filter is not None:
             self._size_filter.import_preset(preset.size_preset)
-            self._size_filter.update_filterstate(self._filter_state)
         if preset.count_preset is not None and self._count_filter is not None:
             self._count_filter.import_preset(preset.count_preset)
-            self._count_filter.update_filterstate(self._filter_state)
         if preset.tags_preset is not None and self._tags_filter is not None:
             self._tags_filter.import_preset(preset.tags_preset)
-            self._tags_filter.update_filterstate(self._filter_state)
