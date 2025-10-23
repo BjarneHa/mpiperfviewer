@@ -123,9 +123,9 @@ def create_parser():
     _ = parser.add_argument(
         "-p",
         "--plot",
-        help="Export the specified plot. You can specify the filename using the format PLOTTYPE=FILENAME."
-        + f" The available plot types are {matrix_plots_list} and {rank_plots_list}."
-        + ' For rank-specific plots, RANK needs to be specified. RANK may be "*" to create plots for all ranks.'
+        help="Export the specified plot. You can specify plot and optionally the filename using the format PLOT_SPEC[=FILENAME]."
+        + f" The available values for PLOT_SPEC are {matrix_plots_list} and {rank_plots_list}."
+        + ' For rank-specific plots, RANK needs to be specified. RANK may be specified as "*" to create plots for all ranks.'
         + f" For matrix plots, a grouping (one of {'/'.join(GROUPINGS)}) needs to be specified.",
         action="append",
     )
@@ -139,8 +139,9 @@ def create_parser():
     _ = parser.add_argument(
         "-x",
         "--filter",
-        help="Set the filters for a certain plot type. Syntax: PLOTTYPE=FILTER=FILTER=..."
-        + " Here's a list of the available filters for all plot types:\n"
+        help="Set the filters for a certain plot type. Syntax: PLOT_TYPE=FILTER[=FILTER=...]"
+        + '. A FILTER is specified with as FILTER_NAME:FILTER_SPEC, where FILTER_SPEC is a comma-separated list of ranges and exact values. E.g. "tag:[-20;10],4,[12;14]". Note that for the count filter, only one range may be specified.'
+        + " Here's a list of the valid FILTER_NAME values for all plot types:\n"
         + ", ".join(
             [
                 f"{name}: "
@@ -155,8 +156,7 @@ def create_parser():
                 )
                 for name, plot_class in chain(MATRIX_PLOTS.items(), RANK_PLOTS.items())
             ]
-        )
-        + '. A FILTER is specified with a name and a comma-separated list of ranges and exact values. E.g. "tag:[-20;10],4,[12;14]". Note that for the count filter, only one range may be specified.',
+        ) + ".",
         action="append",
     )
     return parser
