@@ -11,11 +11,18 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from serde import field, serde
 
 from mpiperfviewer.create_views import CreateMatrixView, CreateRankView
-from mpiperfviewer.filter_widgets import FilterPresets
-from mpiperfviewer.plot_view import PlotViewer, ProjectData
+from mpiperfviewer.plot_view import PlotViewer, PlotViewerData
 from mpiperfviewer.statistics_view import StatisticsView
+
+
+@serde
+class ProjectData:
+    source_directory: Path | None = field(default=None)
+    component: str | None = field(default=None)
+    plot_viewer_data: PlotViewerData = field(default_factory = lambda : PlotViewerData())
 
 
 @final
@@ -29,7 +36,7 @@ class ProjectView(QWidget):
     def __init__(self, project_data: ProjectData | None = None):
         super().__init__()
         if project_data is None:
-            project_data = ProjectData(None, None, [], [], FilterPresets())
+            project_data = ProjectData()
         if project_data.source_directory is None:
             project_data.source_directory = self._get_directory_from_dialog()
 
@@ -74,7 +81,7 @@ class ProjectView(QWidget):
         self._left_col.addWidget(self.create_rank_view)
         self._left_col.addStretch()
         self._right_col = QVBoxLayout()
-        self.plot_viewer = PlotViewer(self.world_data, project_data, self)
+        self.plot_viewer = PlotViewer(self.world_data, project_data.component, project_data.plot_viewer_data, self)
         _ = self.create_matrix_view.create_tab.connect(self.plot_viewer.add_matrix_plot)
         _ = self.create_rank_view.create_tab.connect(self.plot_viewer.add_rank_plot)
         self._right_col.addWidget(self.plot_viewer)
@@ -86,7 +93,5 @@ class ProjectView(QWidget):
         return ProjectData(
             self.project_data.source_directory,
             self.project_data.component,
-            self.plot_viewer.export_tab_plots(),
-            self.plot_viewer.export_detached_plots(),
-            self.plot_viewer.presets,
+            self.plot_viewer.export_data()
         )

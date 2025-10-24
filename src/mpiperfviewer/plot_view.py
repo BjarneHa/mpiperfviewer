@@ -1,5 +1,4 @@
 from itertools import chain
-from pathlib import Path
 from typing import Callable, override
 
 import qtawesome as qta
@@ -186,9 +185,7 @@ class PlotWidget(QWidget):
 
 
 @serde
-class ProjectData:
-    source_directory: Path | None = field(default=None)
-    component: str | None = field(default=None)
+class PlotViewerData:
     tab_plots: list[PlotWidgetData] = field(default_factory=lambda : list[PlotWidgetData]())
     detached_plots: list[PlotWidgetData] = field(default_factory=lambda : list[PlotWidgetData]())
     presets: FilterPresets = field(default_factory = lambda : FilterPresets())
@@ -204,22 +201,23 @@ class PlotViewer(QGroupBox):
     def __init__(
         self,
         world_data: WorldData,
-        project_data: ProjectData,
+        component: Component | None,
+        data: PlotViewerData,
         parent: QWidget | None = None,
     ):
         super().__init__("Plot Viewer", parent)
         self._detached_plots = []
-        self.presets = project_data.presets
-        if project_data.component is None:
+        self.presets = data.presets
+        if component is None:
             raise Exception("Invalid component for project.")
-        self._component = project_data.component
+        self._component = component
         self._world_data = world_data
         layout = QVBoxLayout(self)
         # mplstyle.use("fast")
 
         self._tab_widget = QTabWidget(self, tabsClosable=True)
         layout.addWidget(self._tab_widget)
-        self._initialize_tabs(project_data)
+        self._initialize_tabs(data)
         self._tab_widget.setMovable(True)
         _ = self._tab_widget.tabCloseRequested.connect(self.close_tab)
 
@@ -245,7 +243,7 @@ class PlotViewer(QGroupBox):
     def component_data(self):
         return self._world_data.components[self._component]
 
-    def _initialize_tabs(self, data: ProjectData):
+    def _initialize_tabs(self, data: PlotViewerData):
         if len(data.tab_plots) + len(data.detached_plots) == 0:
             self.add_matrix_plot(MatrixMetric.MESSAGES_SENT, MatrixGroupBy.RANK)
             self.add_matrix_plot(MatrixMetric.BYTES_SENT, MatrixGroupBy.RANK)
@@ -380,8 +378,15 @@ class PlotViewer(QGroupBox):
             plot.draw_plot()
             plot.canvas.draw_idle()
 
-    def export_tab_plots(self):
+    def _export_tab_plots(self):
         return [plot.export_plot() for plot in self._tab_plots]
 
-    def export_detached_plots(self):
+    def _export_detached_plots(self):
         return [plot.export_plot() for plot in self._detached_plots]
+
+    def export_data(self):
+        return PlotViewerData(
+            self._export_tab_plots(),
+            self._export_detached_plots(),
+            self.presets,
+        )

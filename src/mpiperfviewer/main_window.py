@@ -8,17 +8,17 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
 )
-from mpiperfviewer.start_dialog import FILE_EXTENSION, StartDialog
 from serde.json import from_json, to_json
 
-from mpiperfviewer.filter_widgets import FilterPresets
-from mpiperfviewer.plot_view import ProjectData
+from mpiperfviewer.plot_view import PlotViewerData
 from mpiperfviewer.project_state import (
     project_saved,
     project_saved_in_current_state,
     project_updated,
 )
-from mpiperfviewer.project_view import ProjectView
+from mpiperfviewer.project_view import ProjectData, ProjectView
+from mpiperfviewer.start_dialog import FILE_EXTENSION, StartDialog
+
 
 class MainWindow(QMainWindow):
     current_project_file: Path | None
@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
             return
 
         app_window = ProjectView(
-            ProjectData(source_dir, component, [], [], FilterPresets())
+            ProjectData(source_dir, component, PlotViewerData())
         )
         self.setCentralWidget(app_window)
 
