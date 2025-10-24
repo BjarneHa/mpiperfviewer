@@ -47,7 +47,7 @@ from mpiperfviewer.project_state import project_updated
 
 
 @serde
-class PlotWidgetExportData:
+class PlotWidgetData:
     name: str
     param: str
     filters: FilterViewData
@@ -160,7 +160,7 @@ class PlotWidget(QWidget):
         self.plot.draw_plot(self.filter_view.filter_state)
 
     def export_plot(self):
-        return PlotWidgetExportData(
+        return PlotWidgetData(
             name=self.plot.cli_name(),
             param=self.plot.cli_param(),
             filters=self.filter_view.export_data(),
@@ -168,7 +168,7 @@ class PlotWidget(QWidget):
 
     @staticmethod
     def import_plot(
-        data: PlotWidgetExportData,
+        data: PlotWidgetData,
         world_meta: WorldMeta,
         component_data: ComponentData,
         presets: FilterPresets,
@@ -189,8 +189,8 @@ class PlotWidget(QWidget):
 class ProjectData:
     source_directory: Path | None = field(default=None)
     component: str | None = field(default=None)
-    tab_plots: list[PlotWidgetExportData] = field(default_factory=lambda : list[PlotWidgetExportData]())
-    detached_plots: list[PlotWidgetExportData] = field(default_factory=lambda : list[PlotWidgetExportData]())
+    tab_plots: list[PlotWidgetData] = field(default_factory=lambda : list[PlotWidgetData]())
+    detached_plots: list[PlotWidgetData] = field(default_factory=lambda : list[PlotWidgetData]())
     presets: FilterPresets = field(default_factory = lambda : FilterPresets())
 
 
