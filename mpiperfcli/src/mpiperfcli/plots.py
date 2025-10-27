@@ -110,11 +110,12 @@ class MatrixPlotBase(PlotBase, ABC):
         ax = self.fig.add_subplot()
 
         img = ax.imshow(matrix, self._cmap, norm="log", interpolation="nearest")
-        loc = ticker.MaxNLocator('auto', integer=True, min_n_ticks=-1)
+        locx = ticker.MaxNLocator('auto', integer=True, min_n_ticks=-1)
+        locy = ticker.MaxNLocator('auto', integer=True, min_n_ticks=-1)
         ax.xaxis.set_minor_locator(ticker.NullLocator())
         ax.yaxis.set_minor_locator(ticker.NullLocator())
-        ax.xaxis.set_major_locator(loc)
-        ax.yaxis.set_major_locator(loc)
+        ax.xaxis.set_major_locator(locx)
+        ax.yaxis.set_major_locator(locy)
 
         cbar = self.fig.colorbar(img)
         _ = cbar.ax.set_ylabel(self._legend_label, rotation=-90, va="bottom")
@@ -122,7 +123,7 @@ class MatrixPlotBase(PlotBase, ABC):
             _ = ax.axvline(x=sep + 0.5, color="black")
             _ = ax.axhline(y=sep + 0.5, color="black")
 
-        _ = ax.set_xlabel(f"Receiver ({self._group_by})")
+        _ = ax.set_xlabel(f"Recipient ({self._group_by})")
         _ = ax.set_ylabel(f"Sender ({self._group_by})")
         _ = ax.set_title(self._plot_title)
 
@@ -272,6 +273,9 @@ class ThreeDimPlotBase(RankPlotBase, ABC):
         metric = metric[metric_count_filter_array]
         occurances = occurances[np.ix_(procs_count_filter_array, metric_count_filter_array)]
 
+        if occurances.size == 0:
+            raise ValueError("Filters too specific. No data can be visualized.")
+
         # Collect data from collected dict into lists for plot
         xticks = np.arange(0, len(peers))
         yticks = np.arange(0, len(metric))
@@ -338,13 +342,18 @@ class TagsBar3DPlot(ThreeDimBarBase):
     def draw_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
 
-        tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
-            self._data.peers,
-            self._data.occuring_tags,
-            self._data.data,
-            filters.tag,
-            filters.count,
-        )
+        try:
+            tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
+                self._data.peers,
+                self._data.occuring_tags,
+                self._data.data,
+                filters.tag,
+                filters.count,
+            )
+        except ValueError as e:
+            self.fig.clear()
+            self.fig.text(0.5, 0.5, str(e), fontweight='bold', horizontalalignment='center')
+            return
 
         dz = tag_occurances.ravel()
         zero_filter = dz > 0
@@ -396,13 +405,18 @@ class SizeBar3DPlot(ThreeDimBarBase):
     @override
     def draw_plot(self, filters: FilterState):
         ax = cast(Axes3D, self.fig.add_subplot(projection="3d"))  # Poor typing from mpl
-        size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
-            self._data.peers,
-            self._data.occuring_sizes,
-            self._data.data,
-            filters.size,
-            filters.count,
-        )
+        try:
+            size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
+                self._data.peers,
+                self._data.occuring_sizes,
+                self._data.data,
+                filters.size,
+                filters.count,
+            )
+        except ValueError as e:
+            self.fig.clear()
+            self.fig.text(0.5, 0.5, str(e), fontweight='bold', horizontalalignment='center')
+            return
 
         dz = size_occurances.ravel()
         zero_filter = dz > 0
@@ -490,13 +504,18 @@ class TagsPixelPlot(PixelPlotBase):
     @override
     def draw_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
-        tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
-            self._data.peers,
-            self._data.occuring_tags,
-            self._data.data,
-            filters.tag,
-            filters.count,
-        )
+        try:
+            tag_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
+                self._data.peers,
+                self._data.occuring_tags,
+                self._data.data,
+                filters.tag,
+                filters.count,
+            )
+        except ValueError as e:
+            self.fig.clear()
+            self.fig.text(0.5, 0.5, str(e), fontweight='bold', horizontalalignment='center')
+            return
 
         img = self.imshow(ax, tag_occurances, colormaps["Greens"], filters)
 
@@ -536,13 +555,18 @@ class SizePixelPlot(PixelPlotBase):
     @override
     def draw_plot(self, filters: FilterState):
         ax = self.fig.add_subplot()
-        size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
-            self._data.peers,
-            self._data.occuring_sizes,
-            self._data.data,
-            filters.size,
-            filters.count,
-        )
+        try:
+            size_occurances, xticks, yticks, xlabels, ylabels = self.generate_3d_data(
+                self._data.peers,
+                self._data.occuring_sizes,
+                self._data.data,
+                filters.size,
+                filters.count,
+            )
+        except ValueError as e:
+            self.fig.clear()
+            self.fig.text(0.5, 0.5, str(e), fontweight='bold', horizontalalignment='center')
+            return
 
         img = self.imshow(ax, size_occurances, colormaps["Oranges"], filters)
 
