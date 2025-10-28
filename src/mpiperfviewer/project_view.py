@@ -52,10 +52,19 @@ class ProjectView(QWidget):
                 )
                 project_data.source_directory = self._get_directory_from_dialog()
 
+        if len(self.world_data.components) == 0:
+            _ = QMessageBox.warning(
+                self,
+                "Error",
+                "Input data contained no profiled components.",
+            )
+            return
+
         project_data.component, ok = (
             (project_data.component, True)
             if project_data.component is not None
             and project_data.component in self.world_data.components.keys()
+            else list(self.world_data.components.keys())[0], True if len(self.world_data.components) == 1
             else QInputDialog.getItem(
                 self,
                 "Select which component to view.",
