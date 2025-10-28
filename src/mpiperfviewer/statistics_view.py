@@ -32,6 +32,7 @@ class StatisticsView(QGroupBox):
         self._num_items = 0
         component_data = world_data.components[component]
         self._layout = QGridLayout(self)
+        self.add_stat("Open MPI Component", component)
         self.add_stat("#MPI Processes", world_data.meta.num_processes)
         self.add_stat("#Cores", world_data.meta.num_cores)
         self.add_stat("#NUMA Nodes", world_data.meta.num_numa)
