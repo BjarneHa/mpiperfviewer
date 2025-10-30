@@ -123,16 +123,16 @@ def create_parser():
     _ = parser.add_argument(
         "-p",
         "--plot",
-        help="Export the specified plot. You can specify plot and optionally the filename using the format PLOT_SPEC[=FILENAME]."
+        help="Export the specified plot. You can specify a plot and optionally the filename using the format PLOT_SPEC[=FILENAME]."
         + f" The available values for PLOT_SPEC are {matrix_plots_list} and {rank_plots_list}."
-        + ' For rank-specific plots, RANK needs to be specified. RANK may be specified as "*" to create plots for all ranks.'
+        + ' For rank-specific plots, RANK needs to be passed. RANK may be specified as "*" to create plots for all ranks.'
         + f" For matrix plots, a grouping (one of {'/'.join(GROUPINGS)}) needs to be specified.",
         action="append",
     )
     _ = parser.add_argument(
         "--wildcard-rank-min-field-width",
-        help="Specify the minimum field width for the rank number in file names if plots are created with a wildcard."
-        + " By default, the rank will be padded with just enough zeroes such that all file names are in lexicographical order."
+        help="Specify the minimum field width for the rank number in filenames if plots are created with a wildcard."
+        + " By default, the rank will be padded with just enough zeroes such that all filenames are in lexicographical order."
         + " Specify a width of 0 for no padding.",
         type=int,
     )
@@ -140,7 +140,9 @@ def create_parser():
         "-x",
         "--filter",
         help="Set the filters for a certain plot type. Syntax: PLOT_TYPE=FILTER[=FILTER=...]"
-        + '. A FILTER is specified with as FILTER_NAME:FILTER_SPEC, where FILTER_SPEC is a comma-separated list of ranges and exact values. E.g. "tag:[-20;10],4,[12;14]". Note that for the count filter, only one range may be specified.'
+        + '. A FILTER is specified with as FILTER_NAME:FILTER_SPEC, where FILTER_SPEC is a comma-separated list of ranges and exact values. E.g. "tag:[-20;10],4,[12;14]".'
+        + ' When the prefix "!" is added, the given ranges and exact values are excluded. Otherwise they are included.'
+        + ' Note that for the count filter, only one range may be specified, which can not be excluded.'
         + " Here's a list of the valid FILTER_NAME values for all plot types:\n"
         + ", ".join(
             [
@@ -248,7 +250,10 @@ def main():
             return
         plot, param, filename = match.groups()
         if filename is None:
-            filename = f"{plot}_{param}.{parser_data.default_format}"
+            if param == '*':
+                filename = f"{plot}.{parser_data.default_format}"
+            else:
+                filename = f"{plot}_{param}.{parser_data.default_format}"
         if param == "*":
             if RANK_PLOTS.get(plot) is None:
                 print(

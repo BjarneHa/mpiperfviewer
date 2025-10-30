@@ -146,9 +146,7 @@ class PlotWidget(QWidget):
     @Slot()
     def filters_changed(self):
         project_updated()
-        self.plot.fig.clear()
         self.draw_plot()
-        self.canvas.draw_idle()
         self._update_cmd()
 
     @override
@@ -156,7 +154,9 @@ class PlotWidget(QWidget):
         self.closed.emit()
 
     def draw_plot(self):
+        self.canvas.figure.clear()
         self.plot.draw_plot(self.filter_view.filter_state)
+        self.canvas.draw_idle()
 
     def export_plot(self):
         return PlotWidgetData(
@@ -374,9 +374,7 @@ class PlotViewer(QGroupBox):
 
     def _update_plots(self):
         for plot in self._all_plots:
-            plot.canvas.figure.clear()
             plot.draw_plot()
-            plot.canvas.draw_idle()
 
     def _export_tab_plots(self):
         return [plot.export_plot() for plot in self._tab_plots]

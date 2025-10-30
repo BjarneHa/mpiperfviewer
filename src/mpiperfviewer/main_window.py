@@ -143,6 +143,8 @@ class MainWindow(QMainWindow):
         )
         if save_name == "":
             return
+        if not save_name.endswith(f".{FILE_EXTENSION}"):
+            save_name += f".{FILE_EXTENSION}"
         self.current_project_file = Path(save_name)
         try:
             self.save_project()

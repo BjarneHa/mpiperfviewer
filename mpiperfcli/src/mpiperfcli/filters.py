@@ -106,7 +106,7 @@ class RangeFilter(SerializedFilter):
             case min if min == n - 1:
                 left = min_str
             case _:
-                left = f"[{min_str}; {n - 1}]"
+                left = f"[{min_str};{n - 1}]"
 
         match self.max:
             case max if max == n:
@@ -164,7 +164,7 @@ class MultiRangeFilter(Filter):
 
         for i, el in enumerate(text.split(",")):
             try:
-                range_filter = RangeFilter.from_str(el)
+                range_filter = RangeFilter.from_str(el, i)
                 if range_filter is not None:
                     self.ranges.append(range_filter)
                 else:

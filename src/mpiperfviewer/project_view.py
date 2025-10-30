@@ -60,12 +60,13 @@ class ProjectView(QWidget):
             )
             return
 
-        project_data.component, ok = (
-            (project_data.component, True)
-            if project_data.component is not None
-            and project_data.component in self.world_data.components.keys()
-            else list(self.world_data.components.keys())[0], True if len(self.world_data.components) == 1
-            else QInputDialog.getItem(
+        if project_data.component is not None:
+            ok = project_data.component in self.world_data.components.keys()
+        elif len(self.world_data.components) == 1:
+            project_data.component = list(self.world_data.components.keys())[0]
+            ok = True
+        else:
+            project_data.component, ok = QInputDialog.getItem(
                 self,
                 "Select which component to view.",
                 "Component",
@@ -73,7 +74,6 @@ class ProjectView(QWidget):
                 0,
                 False,
             )
-        )
         if not ok:
             raise Exception("User did not choose a component")
 

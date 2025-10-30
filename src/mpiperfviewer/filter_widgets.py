@@ -3,6 +3,15 @@ from typing import Self, override
 
 import numpy as np
 import qtawesome as qta
+from mpiperfcli.filters import (
+    BadFilter,
+    FilterState,
+    FilterType,
+    InvertedFilter,
+    MultiRangeFilter,
+    RangeFilter,
+    Unfiltered,
+)
 from PySide6.QtCore import (
     QObject,
     Qt,
@@ -27,16 +36,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from serde import field, serde
-
-from mpiperfcli.filters import (
-    BadFilter,
-    FilterState,
-    FilterType,
-    InvertedFilter,
-    MultiRangeFilter,
-    RangeFilter,
-    Unfiltered,
-)
 
 
 class PresetEditDialog[T](QDialog):
@@ -355,7 +354,7 @@ class RangeFilterObject(FilterObjectBase[RangeFilter, RangeFilterData]):
         raise Exception("Unimplemented!")
 
 
-MULTIRANGE_REGEXP = r"[inf0-9,;\+\-\[\]]*"
+MULTIRANGE_REGEXP = r"[infINF0-9,;\+\-\[\]]*"
 
 COLLECTIVES = [
     (-10, "MPI_Allgather"),
@@ -491,18 +490,20 @@ class MultiRangeFilterWidget(QWidget):
         else:
             _ = QMessageBox.warning(self, "Error in filter syntax.", tooltip)
 
+    def _get_filter(self, tolerant: bool=False):
+        return MultiRangeFilter(self._line_edit.text().lower(), tolerant)
 
     @Slot()
     def _filter_line_changed(self):
         try:
-            _ = MultiRangeFilter(self._line_edit.text())
+            _ = self._get_filter()
             self._set_filter_status(ok=True)
         except ValueError as e:
             self._set_filter_status(ok=False, msg=str(e))
 
     @Slot()
     def edit_pressed(self):
-        filter = MultiRangeFilter(self._line_edit.text(), tolerant=True)
+        filter = self._get_filter(tolerant=True)
         tags = np.array([tag for tag, _ in COLLECTIVES])
         tag_included = filter.apply(tags)
         for cb, included in zip(self._collectives.checkboxes, tag_included):
@@ -520,7 +521,7 @@ class MultiRangeFilterWidget(QWidget):
     @Slot(int)
     def _collectives_unchecked(self, tag: int):
         text = self._line_edit.text()
-        filter = MultiRangeFilter(text, tolerant=True)
+        filter = self._get_filter(tolerant=True)
         segments = text.split(",")
         for exact in filter.exact:
             if exact.segment is None:
@@ -547,7 +548,7 @@ class MultiRangeFilterWidget(QWidget):
 
     def state(self):
         try:
-            return MultiRangeFilter(self._line_edit.text())
+            return self._get_filter()
         except ValueError as e:
             _ = QMessageBox.warning(self, "Error in Filter", str(e))
             return BadFilter()
