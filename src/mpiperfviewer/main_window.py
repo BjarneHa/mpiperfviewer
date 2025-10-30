@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
         if not self.are_you_sure():
             return
         self.hide()
+        self.app_window.plot_viewer.close_detached_plots()
         _ = self.takeCentralWidget()
         self.setCentralWidget(ProjectView())
         self.show()
@@ -98,6 +99,7 @@ class MainWindow(QMainWindow):
         )
         if save_name == "":
             return
+        self.app_window.plot_viewer.close_detached_plots()
         self._open_project_from_path(Path(save_name))
 
     def _open_project_from_path(self, path: Path):

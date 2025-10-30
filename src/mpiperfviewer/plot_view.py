@@ -388,3 +388,7 @@ class PlotViewer(QGroupBox):
             self._export_detached_plots(),
             self.presets,
         )
+
+    def close_detached_plots(self):
+        for plot in self._detached_plots:
+            plot.close()
